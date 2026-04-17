@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>AppointmentsPage</class>
+ <widget class="QWidget" name="AppointmentsPage">
+  <property name="styleSheet">
+   <string notr="true">QLabel#PageTitle{font: 800 16pt "Segoe UI";}
+QFrame#Card{background: #FFFFFF; border: 1px solid rgba(15,23,42,0.08); border-radius: 18px;}
+QComboBox, QDateTimeEdit{
+background: rgba(255,255,255,0.95);
+border: 1px solid rgba(15,23,42,0.08);
+border-radius: 12px;
+padding: 10px 12px;
+font: 600 10pt "Segoe UI";
+}
+QPushButton#PrimaryButton{
+border:0px; border-radius:14px; padding:12px 14px;
+color:white; font: 800 10pt "Segoe UI";
+background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>26</number>
+   </property>
+   <property name="topMargin">
+    <number>22</number>
+   </property>
+   <property name="rightMargin">
+    <number>26</number>
+   </property>
+   <property name="bottomMargin">
+    <number>22</number>
+   </property>
+   <property name="spacing">
+    <number>16</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <widget class="QLabel" name="headerEmoji">
+       <property name="text">
+        <string>🗓️</string>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font-size: 18px;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="PageTitle">
+       <property name="objectName">
+        <string>PageTitle</string>
+       </property>
+       <property name="text">
+        <string>Đặt lịch</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QFrame" name="createCard">
+     <property name="objectName">
+      <string>Card</string>
+     </property>
+     <layout class="QVBoxLayout" name="createLayout">
+      <property name="leftMargin">
+       <number>22</number>
+      </property>
+      <property name="topMargin">
+       <number>20</number>
+      </property>
+      <property name="rightMargin">
+       <number>22</number>
+      </property>
+      <property name="bottomMargin">
+       <number>20</number>
+      </property>
+      <property name="spacing">
+       <number>12</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="createTitle">
+        <property name="text">
+         <string>Tạo lịch hẹn mới</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">font: 800 10pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelCustomer">
+        <property name="text">
+         <string>Khách hàng</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="customerCombo">
+        <item>
+         <property name="text">
+          <string>Chọn khách hàng</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelPet">
+        <property name="text">
+         <string>Thú cưng</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="petCombo">
+        <item>
+         <property name="text">
+          <string>Chọn thú cưng</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelService">
+        <property name="text">
+         <string>Dịch vụ</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="serviceCombo">
+        <item>
+         <property name="text">
+          <string>Chọn dịch vụ</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelTime">
+        <property name="text">
+         <string>Thời gian</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QDateTimeEdit" name="timeEdit">
+        <property name="calendarPopup">
+         <bool>true</bool>
+        </property>
+        <property name="displayFormat">
+         <string>dd/MM/yyyy HH:mm</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="confirmButton">
+        <property name="objectName">
+         <string>PrimaryButton</string>
+        </property>
+        <property name="text">
+         <string>Xác nhận đặt lịch</string>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="recentCard">
+     <property name="objectName">
+      <string>Card</string>
+     </property>
+     <layout class="QVBoxLayout" name="recentLayout">
+      <property name="leftMargin">
+       <number>22</number>
+      </property>
+      <property name="topMargin">
+       <number>20</number>
+      </property>
+      <property name="rightMargin">
+       <number>22</number>
+      </property>
+      <property name="bottomMargin">
+       <number>20</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="recentTitle">
+        <property name="text">
+         <string>Lịch hẹn gần đây</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">font: 800 10pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="recentEmpty">
+        <property name="text">
+         <string>Chưa có lịch hẹn</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgba(15,23,42,0.35); font: 700 9pt "Segoe UI";</string>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>80</height>
+         </size>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

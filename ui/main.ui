@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="minimumSize">
+   <size>
+    <width>1024</width>
+    <height>640</height>
+   </size>
+  </property>
+  <property name="windowTitle">
+   <string>Pet Care Management</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <property name="objectName">
+    <string>AppRoot</string>
+   </property>
+   <layout class="QHBoxLayout" name="rootLayout">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+    <item>
+     <widget class="QWidget" name="Sidebar">
+      <property name="minimumSize">
+       <size>
+        <width>240</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>240</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <layout class="QVBoxLayout" name="sidebarLayout">
+       <property name="leftMargin">
+        <number>18</number>
+       </property>
+       <property name="topMargin">
+        <number>18</number>
+       </property>
+       <property name="rightMargin">
+        <number>18</number>
+       </property>
+       <property name="bottomMargin">
+        <number>18</number>
+       </property>
+       <property name="spacing">
+        <number>10</number>
+       </property>
+       <item>
+        <layout class="QHBoxLayout" name="sidebarHeader">
+         <property name="spacing">
+          <number>10</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="sidebarPaw">
+           <property name="text">
+            <string>🐾</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font-size: 16px; color: rgba(255,255,255,0.92);</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="SidebarTitle">
+           <property name="text">
+            <string>Pet Care Man...</string>
+           </property>
+           <property name="objectName">
+            <string>SidebarTitle</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <spacer name="verticalSpacerTop">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>8</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="navDashboard">
+         <property name="text">
+          <string>  Trang chủ</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="navCustomers">
+         <property name="text">
+          <string>  Khách hàng</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="navPets">
+         <property name="text">
+          <string>  Thú cưng</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="navServices">
+         <property name="text">
+          <string>  Dịch vụ</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="navAppointments">
+         <property name="text">
+          <string>  Đặt lịch</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="navInvoices">
+         <property name="text">
+          <string>  Hóa đơn</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="logoutButton">
+         <property name="text">
+          <string>  Đăng xuất</string>
+         </property>
+         <property name="objectName">
+          <string>Logout</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QWidget" name="content">
+      <layout class="QVBoxLayout" name="contentLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QStackedWidget" name="stack">
+         <widget class="QWidget" name="pagePlaceholder">
+          <layout class="QVBoxLayout" name="placeholderLayout">
+           <item>
+            <widget class="QLabel" name="placeholderLabel">
+             <property name="text">
+              <string>Loading...</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

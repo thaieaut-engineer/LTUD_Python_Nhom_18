@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DashboardPage</class>
+ <widget class="QWidget" name="DashboardPage">
+  <property name="styleSheet">
+   <string notr="true">QLabel#PageTitle{font: 800 16pt "Segoe UI";}
+QFrame#Card{background: #FFFFFF; border: 1px solid rgba(15,23,42,0.08); border-radius: 18px;}
+QFrame#StatBlue{background: #7C83FF; border-radius: 18px;}
+QFrame#StatOrange{background: #F5B523; border-radius: 18px;}
+QFrame#StatGreen{background: #21C58E; border-radius: 18px;}
+QFrame#StatPink{background: #FF67B3; border-radius: 18px;}
+QLabel#StatTitle{color: rgba(255,255,255,0.86); font: 700 9pt "Segoe UI";}
+QLabel#StatValue{color: white; font: 900 18pt "Segoe UI";}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>26</number>
+   </property>
+   <property name="topMargin">
+    <number>22</number>
+   </property>
+   <property name="rightMargin">
+    <number>26</number>
+   </property>
+   <property name="bottomMargin">
+    <number>22</number>
+   </property>
+   <property name="spacing">
+    <number>18</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <widget class="QLabel" name="headerEmoji">
+       <property name="text">
+        <string>📊</string>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font-size: 18px;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="PageTitle">
+       <property name="text">
+        <string>Trang chủ</string>
+       </property>
+       <property name="objectName">
+        <string>PageTitle</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QGridLayout" name="statsGrid">
+     <property name="horizontalSpacing">
+      <number>16</number>
+     </property>
+     <property name="verticalSpacing">
+      <number>16</number>
+     </property>
+     <item row="0" column="0">
+      <widget class="QFrame" name="StatBlue">
+       <property name="objectName">
+        <string>StatBlue</string>
+       </property>
+       <layout class="QVBoxLayout" name="blueLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="blueTitle">
+          <property name="objectName">
+           <string>StatTitle</string>
+          </property>
+          <property name="text">
+           <string>Doanh thu hôm nay</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="blueValue">
+          <property name="objectName">
+           <string>StatValue</string>
+          </property>
+          <property name="text">
+           <string>0đ</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="blueSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QFrame" name="StatOrange">
+       <property name="objectName">
+        <string>StatOrange</string>
+       </property>
+       <layout class="QVBoxLayout" name="orangeLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="orangeTitle">
+          <property name="objectName">
+           <string>StatTitle</string>
+          </property>
+          <property name="text">
+           <string>Thú cưng</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="orangeValue">
+          <property name="objectName">
+           <string>StatValue</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="orangeSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item row="1" column="0">
+      <widget class="QFrame" name="StatGreen">
+       <property name="objectName">
+        <string>StatGreen</string>
+       </property>
+       <layout class="QVBoxLayout" name="greenLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="greenTitle">
+          <property name="objectName">
+           <string>StatTitle</string>
+          </property>
+          <property name="text">
+           <string>Khách hàng</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="greenValue">
+          <property name="objectName">
+           <string>StatValue</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="greenSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QFrame" name="StatPink">
+       <property name="objectName">
+        <string>StatPink</string>
+       </property>
+       <layout class="QVBoxLayout" name="pinkLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="pinkTitle">
+          <property name="objectName">
+           <string>StatTitle</string>
+          </property>
+          <property name="text">
+           <string>Lịch hẹn hôm nay</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="pinkValue">
+          <property name="objectName">
+           <string>StatValue</string>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="pinkSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QFrame" name="Card">
+     <property name="objectName">
+      <string>Card</string>
+     </property>
+     <layout class="QVBoxLayout" name="cardLayout">
+      <property name="leftMargin">
+       <number>22</number>
+      </property>
+      <property name="topMargin">
+       <number>20</number>
+      </property>
+      <property name="rightMargin">
+       <number>22</number>
+      </property>
+      <property name="bottomMargin">
+       <number>20</number>
+      </property>
+      <property name="spacing">
+       <number>14</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="chartTitle">
+        <property name="text">
+         <string>Doanh thu 7 ngày gần nhất</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">font: 800 10pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="chartPlaceholder">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>220</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>0          0          0          0          0          0          0
+
+04-07     04-08     04-09     04-10     04-11     04-12     04-13</string>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">color: rgba(15,23,42,0.35); font: 700 9pt "Segoe UI";</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
