@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>InvoicesPage</class>
+ <widget class="QWidget" name="InvoicesPage">
+  <property name="styleSheet">
+   <string notr="true">QLabel#PageTitle{font: 800 16pt "Segoe UI";}
+QPushButton#PrimaryButton{
+border:0px; border-radius:14px; padding:10px 14px;
+color:white; font: 800 10pt "Segoe UI";
+background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+}
+QLabel#Muted{color: rgba(15,23,42,0.40); font: 700 10pt "Segoe UI";}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>26</number>
+   </property>
+   <property name="topMargin">
+    <number>22</number>
+   </property>
+   <property name="rightMargin">
+    <number>26</number>
+   </property>
+   <property name="bottomMargin">
+    <number>22</number>
+   </property>
+   <property name="spacing">
+    <number>14</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <widget class="QLabel" name="headerEmoji">
+       <property name="text">
+        <string>💵</string>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font-size: 18px;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="PageTitle">
+       <property name="objectName">
+        <string>PageTitle</string>
+       </property>
+       <property name="text">
+        <string>Hóa đơn</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="createInvoiceButton">
+       <property name="objectName">
+        <string>PrimaryButton</string>
+       </property>
+       <property name="text">
+        <string>＋  Tạo hóa đơn</string>
+       </property>
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QLabel" name="emptyLabel">
+     <property name="objectName">
+      <string>Muted</string>
+     </property>
+     <property name="text">
+      <string>Chưa có hóa đơn nào</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignCenter</set>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer_2">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>200</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
