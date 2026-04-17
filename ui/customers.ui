@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>CustomersPage</class>
+ <widget class="QWidget" name="CustomersPage">
+  <property name="styleSheet">
+   <string notr="true">QLabel#PageTitle{font: 800 16pt "Segoe UI";}
+QFrame#Card{background: #FFFFFF; border: 1px solid rgba(15,23,42,0.08); border-radius: 18px;}
+QLineEdit{background: rgba(255,255,255,0.95); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 10px 12px; font: 600 10pt "Segoe UI";}
+QPushButton#PrimaryButton{
+border:0px; border-radius:14px; padding:10px 14px;
+color:white; font: 800 10pt "Segoe UI";
+background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+}
+QHeaderView::section{background: rgba(15,23,42,0.03); border:0px; padding:10px 12px; font: 700 9pt "Segoe UI"; color: rgba(15,23,42,0.70);}</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>26</number>
+   </property>
+   <property name="topMargin">
+    <number>22</number>
+   </property>
+   <property name="rightMargin">
+    <number>26</number>
+   </property>
+   <property name="bottomMargin">
+    <number>22</number>
+   </property>
+   <property name="spacing">
+    <number>14</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <widget class="QLabel" name="headerEmoji">
+       <property name="text">
+        <string>👤</string>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font-size: 18px;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="PageTitle">
+       <property name="objectName">
+        <string>PageTitle</string>
+       </property>
+       <property name="text">
+        <string>Quản lý khách hàng</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="addCustomerButton">
+       <property name="objectName">
+        <string>PrimaryButton</string>
+       </property>
+       <property name="text">
+        <string>＋  Thêm khách hàng</string>
+       </property>
+       <property name="cursor">
+        <cursorShape>PointingHandCursor</cursorShape>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QLineEdit" name="searchEdit">
+     <property name="placeholderText">
+      <string>Tìm kiếm theo tên hoặc SĐT...</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QFrame" name="Card">
+     <property name="objectName">
+      <string>Card</string>
+     </property>
+     <layout class="QVBoxLayout" name="cardLayout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QTableWidget" name="customersTable">
+        <property name="columnCount">
+         <number>5</number>
+        </property>
+        <attribute name="horizontalHeaderDefaultSectionSize">
+         <number>160</number>
+        </attribute>
+        <column>
+         <property name="text">
+          <string>ID</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Tên</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>SĐT</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Địa chỉ</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Thao tác</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
