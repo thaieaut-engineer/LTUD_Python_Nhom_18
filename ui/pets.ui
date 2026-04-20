@@ -109,11 +109,16 @@ QHeaderView::section{background: rgba(15,23,42,0.03); border:0px; padding:10px 1
       <item>
        <widget class="QTableWidget" name="petsTable">
         <property name="columnCount">
-         <number>6</number>
+         <number>7</number>
         </property>
         <attribute name="horizontalHeaderDefaultSectionSize">
          <number>150</number>
         </attribute>
+        <column>
+         <property name="text">
+          <string>Ảnh</string>
+         </property>
+        </column>
         <column>
          <property name="text">
           <string>Tên</string>

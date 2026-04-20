@@ -1,0 +1,411 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ExamPage</class>
+ <widget class="QWidget" name="ExamPage">
+  <property name="styleSheet">
+   <string notr="true"></string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>26</number>
+   </property>
+   <property name="topMargin">
+    <number>22</number>
+   </property>
+   <property name="rightMargin">
+    <number>26</number>
+   </property>
+   <property name="bottomMargin">
+    <number>22</number>
+   </property>
+   <property name="spacing">
+    <number>16</number>
+   </property>
+   <item>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <item>
+      <widget class="QLabel" name="headerEmoji">
+       <property name="text">
+        <string>🩺</string>
+       </property>
+       <property name="styleSheet">
+        <string notr="true">font-size: 18px;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="PageTitle">
+       <property name="objectName">
+        <string>PageTitle</string>
+       </property>
+       <property name="text">
+        <string>Phiên khám</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+  <item>
+   <widget class="QScrollArea" name="examScroll">
+    <property name="widgetResizable">
+     <bool>true</bool>
+    </property>
+    <property name="frameShape">
+     <enum>QFrame::NoFrame</enum>
+    </property>
+    <widget class="QWidget" name="scrollContents">
+     <layout class="QVBoxLayout" name="scrollLayout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <property name="spacing">
+       <number>16</number>
+      </property>
+      <item>
+       <widget class="QFrame" name="createCard">
+        <property name="objectName">
+         <string>Card</string>
+        </property>
+        <layout class="QVBoxLayout" name="createLayout">
+         <property name="leftMargin">
+          <number>22</number>
+         </property>
+         <property name="topMargin">
+          <number>20</number>
+         </property>
+         <property name="rightMargin">
+          <number>22</number>
+         </property>
+         <property name="bottomMargin">
+          <number>20</number>
+         </property>
+         <property name="spacing">
+          <number>14</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="createTitle">
+           <property name="text">
+            <string>Tạo phiên khám</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font: 800 10pt "Segoe UI";</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <layout class="QGridLayout" name="topGrid">
+           <property name="horizontalSpacing">
+            <number>14</number>
+           </property>
+           <property name="verticalSpacing">
+            <number>10</number>
+           </property>
+           <item row="0" column="0">
+            <widget class="QLabel" name="labelCustomer">
+             <property name="text">
+              <string>Khách hàng</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QComboBox" name="examCustomerCombo">
+             <item>
+              <property name="text">
+               <string>Chọn khách hàng</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="labelPet">
+             <property name="text">
+              <string>Thú cưng</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="examPetEdit">
+             <property name="placeholderText">
+              <string>Nhập tên thú cưng...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="labelTime">
+             <property name="text">
+              <string>Thời gian khám</string>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0" colspan="2">
+            <widget class="QDateTimeEdit" name="examTimeEdit">
+             <property name="calendarPopup">
+              <bool>true</bool>
+             </property>
+             <property name="displayFormat">
+              <string>dd/MM/yyyy HH:mm</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="metricsLayout">
+           <property name="spacing">
+            <number>14</number>
+           </property>
+           <item>
+            <layout class="QVBoxLayout" name="tempLayout">
+             <item>
+              <widget class="QLabel" name="labelTemp">
+               <property name="text">
+                <string>Nhiệt độ (°C)</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="tempSpin">
+               <property name="decimals">
+                <number>1</number>
+               </property>
+               <property name="minimum">
+                <double>30.0</double>
+               </property>
+               <property name="maximum">
+                <double>45.0</double>
+               </property>
+               <property name="value">
+                <double>38.5</double>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QVBoxLayout" name="weightLayout">
+             <item>
+              <widget class="QLabel" name="labelWeight">
+               <property name="text">
+                <string>Cân nặng (kg)</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="weightSpin">
+               <property name="decimals">
+                <number>1</number>
+               </property>
+               <property name="minimum">
+                <double>0.1</double>
+               </property>
+               <property name="maximum">
+                <double>120.0</double>
+               </property>
+               <property name="value">
+                <double>3.2</double>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QVBoxLayout" name="feeLayout">
+             <item>
+              <widget class="QLabel" name="labelFee">
+               <property name="text">
+                <string>Phí phát sinh (đ)</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QSpinBox" name="extraFeeSpin">
+               <property name="maximum">
+                <number>10000000</number>
+               </property>
+               <property name="singleStep">
+                <number>5000</number>
+               </property>
+               <property name="value">
+                <number>0</number>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelSymptoms">
+           <property name="text">
+            <string>Triệu chứng</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QTextEdit" name="symptomsEdit">
+           <property name="placeholderText">
+            <string>VD: bỏ ăn, nôn nhẹ, ho...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="labelDiagnosis">
+           <property name="text">
+            <string>Chẩn đoán / Kết luận</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QTextEdit" name="diagnosisEdit">
+           <property name="placeholderText">
+            <string>VD: viêm đường hô hấp nhẹ, theo dõi 3 ngày...</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="saveExamButton">
+           <property name="objectName">
+            <string>PrimaryButton</string>
+           </property>
+           <property name="text">
+            <string>Lưu phiên khám</string>
+           </property>
+           <property name="cursor">
+            <cursorShape>PointingHandCursor</cursorShape>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>44</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QFrame" name="recentCard">
+        <property name="objectName">
+         <string>Card</string>
+        </property>
+        <layout class="QVBoxLayout" name="recentLayout">
+         <property name="leftMargin">
+          <number>22</number>
+         </property>
+         <property name="topMargin">
+          <number>20</number>
+         </property>
+         <property name="rightMargin">
+          <number>22</number>
+         </property>
+         <property name="bottomMargin">
+          <number>20</number>
+         </property>
+         <property name="spacing">
+          <number>10</number>
+         </property>
+         <item>
+          <widget class="QLabel" name="recentTitle">
+           <property name="text">
+            <string>Phiên khám gần đây</string>
+           </property>
+           <property name="styleSheet">
+            <string notr="true">font: 800 10pt "Segoe UI";</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="recentExamsLabel">
+           <property name="objectName">
+            <string>Muted</string>
+           </property>
+           <property name="text">
+            <string>Chưa có phiên khám</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+           </property>
+           <property name="wordWrap">
+            <bool>true</bool>
+           </property>
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>120</height>
+            </size>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <spacer name="bottomSpacer">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </widget>
+   </widget>
+  </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
+

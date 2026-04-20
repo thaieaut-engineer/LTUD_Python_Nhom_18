@@ -87,26 +87,60 @@ def qss() -> str:
       background: {t.sidebar_item};
     }}
 
-    QLineEdit, QComboBox, QDateTimeEdit {{
+    QLineEdit, QComboBox, QDateTimeEdit, QTextEdit, QSpinBox, QDoubleSpinBox {{
       background: rgba(255,255,255,0.95);
       border: 1px solid {t.border};
       border-radius: 12px;
       padding: 10px 12px;
+      min-height: 40px;
       selection-background-color: {t.primary_left};
     }}
 
-    QLineEdit:focus, QComboBox:focus, QDateTimeEdit:focus {{
+    QTextEdit {{
+      padding-top: 10px;
+      padding-bottom: 10px;
+      min-height: 92px;
+    }}
+
+    QLineEdit:focus, QComboBox:focus, QDateTimeEdit:focus, QTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
       border: 1px solid rgba(99,102,241,0.55);
+    }}
+
+    QSpinBox, QDoubleSpinBox {{
+      padding-right: 34px; /* room for buttons */
+    }}
+
+    QSpinBox::up-button, QSpinBox::down-button,
+    QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {{
+      subcontrol-origin: border;
+      width: 28px;
+      background: rgba(15,23,42,0.03);
+      border-left: 1px solid {t.border};
+    }}
+
+    QSpinBox::up-button, QDoubleSpinBox::up-button {{
+      subcontrol-position: top right;
+      border-top-right-radius: 12px;
+    }}
+
+    QSpinBox::down-button, QDoubleSpinBox::down-button {{
+      subcontrol-position: bottom right;
+      border-bottom-right-radius: 12px;
+    }}
+
+    QSpinBox::up-button:hover, QSpinBox::down-button:hover,
+    QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover {{
+      background: rgba(99,102,241,0.10);
     }}
 
     QComboBox::drop-down {{
       border: 0px;
-      width: 24px;
+      width: 26px;
     }}
 
     QDateTimeEdit::drop-down {{
       border: 0px;
-      width: 28px;
+      width: 30px;
     }}
 
     QPushButton#PrimaryButton {{
