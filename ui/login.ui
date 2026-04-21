@@ -13,12 +13,13 @@
   </property>
   <property name="styleSheet">
    <string notr="true">QWidget#LoginPage{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #1A1B4F, stop:1 #3B3CC9);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+  stop:0 #1e1b4b, stop:0.4 #4338ca, stop:0.75 #7c3aed, stop:1 #c026d3);
 }
 QFrame#LoginCard{
-background: rgba(255,255,255,0.12);
-border: 1px solid rgba(255,255,255,0.10);
-border-radius: 18px;
+background: rgba(255,255,255,0.14);
+border: 1px solid rgba(255,255,255,0.22);
+border-radius: 22px;
 }
 QLineEdit{
 background: rgba(255,255,255,0.15);
@@ -49,15 +50,19 @@ padding: 10px 14px;
 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
 }
 QPushButton#LoginButton:hover{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #5B61EA, stop:1 #7C4EF0);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #818cf8, stop:1 #e879f9);
+}
+QPushButton#LoginButton:pressed{
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366f1, stop:1 #c026d3);
 }
 QLabel#Hint{
 color: rgba(255,255,255,0.35);
 font: 600 9pt "Segoe UI";
 }
 QFrame#Logo{
-background: rgba(255,255,255,0.14);
-border-radius: 18px;
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255,255,255,0.28), stop:1 rgba(255,255,255,0.08));
+border: 1px solid rgba(255,255,255,0.2);
+border-radius: 20px;
 }</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">

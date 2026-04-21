@@ -3,19 +3,54 @@
  <class>AppointmentsPage</class>
  <widget class="QWidget" name="AppointmentsPage">
   <property name="styleSheet">
-   <string notr="true">QLabel#PageTitle{font: 800 16pt "Segoe UI";}
-QFrame#Card{background: #FFFFFF; border: 1px solid rgba(15,23,42,0.08); border-radius: 18px;}
-QComboBox, QDateTimeEdit, QLineEdit{
+   <string notr="true">QLabel#PageTitle{font: 800 17pt "Segoe UI"; letter-spacing: -0.3px;}
+QFrame#createCard, QFrame#recentCard{
+background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+  stop:0 #ffffff, stop:1 #faf5ff);
+border: 1px solid rgba(99,102,241,0.12);
+border-radius: 20px;
+}
+QFrame#createCard QComboBox,
+QFrame#createCard QDateTimeEdit,
+QFrame#createCard QListWidget{
 background: rgba(255,255,255,0.95);
 border: 1px solid rgba(15,23,42,0.08);
 border-radius: 12px;
 padding: 10px 12px;
 font: 600 10pt "Segoe UI";
 }
+QFrame#createCard QListWidget{
+padding: 6px 8px;
+}
+QTableWidget QComboBox{
+background: rgba(255,255,255,0.95);
+border: 1px solid rgba(15,23,42,0.08);
+border-radius: 10px;
+padding: 2px 30px 2px 8px;
+font: 600 10pt "Segoe UI";
+min-height: 34px;
+}
+QTableWidget QComboBox QAbstractItemView{
+min-width: 260px;
+padding: 4px 0px;
+}
 QPushButton#PrimaryButton{
 border:0px; border-radius:14px; padding:12px 14px;
 color:white; font: 800 10pt "Segoe UI";
-background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #c026d3);
+}
+QPushButton#PrimaryButton:hover{
+background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #4f46e5, stop:1 #a21caf);
+}
+QScrollArea{border: 0px; background: transparent;}
+QScrollArea > QWidget > QWidget{background: transparent;}
+QFrame#recentCard QPlainTextEdit{
+background: rgba(255,255,255,0.95);
+border: 1px solid rgba(99,102,241,0.15);
+border-radius: 14px;
+padding: 14px 16px;
+font: 600 10pt "Segoe UI";
+color: #0F172A;
 }</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
@@ -72,9 +107,46 @@ background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6)
     </layout>
    </item>
    <item>
+    <widget class="QScrollArea" name="appointmentsScrollArea">
+     <property name="sizePolicy">
+      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+       <horstretch>0</horstretch>
+       <verstretch>1</verstretch>
+      </sizepolicy>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarAsNeeded</enum>
+     </property>
+     <property name="verticalScrollBarPolicy">
+      <enum>Qt::ScrollBarAsNeeded</enum>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <layout class="QVBoxLayout" name="scrollVerticalLayout">
+       <property name="spacing">
+        <number>16</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>8</number>
+       </property>
+       <item>
     <widget class="QFrame" name="createCard">
      <property name="objectName">
-      <string>Card</string>
+      <string>createCard</string>
      </property>
      <layout class="QVBoxLayout" name="createLayout">
       <property name="leftMargin">
@@ -124,7 +196,7 @@ background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6)
       <item>
        <widget class="QLabel" name="labelPet">
         <property name="text">
-         <string>Thú cưng</string>
+         <string>Thú cưng (chọn một hoặc nhiều)</string>
         </property>
         <property name="styleSheet">
          <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
@@ -132,9 +204,15 @@ background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6)
        </widget>
       </item>
       <item>
-       <widget class="QLineEdit" name="petEdit">
-        <property name="placeholderText">
-         <string>Nhập tên thú cưng...</string>
+       <widget class="QListWidget" name="petListWidget">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>120</height>
+         </size>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::NoSelection</enum>
         </property>
        </widget>
       </item>
@@ -192,11 +270,11 @@ background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6)
       </item>
      </layout>
     </widget>
-   </item>
-   <item>
+       </item>
+       <item>
     <widget class="QFrame" name="recentCard">
      <property name="objectName">
-      <string>Card</string>
+      <string>recentCard</string>
      </property>
      <layout class="QVBoxLayout" name="recentLayout">
       <property name="leftMargin">
@@ -214,7 +292,7 @@ background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6)
       <item>
        <widget class="QLabel" name="recentTitle">
         <property name="text">
-         <string>Lịch hẹn gần đây</string>
+         <string>Danh sách lịch hẹn</string>
         </property>
         <property name="styleSheet">
          <string notr="true">font: 800 10pt "Segoe UI";</string>
@@ -222,25 +300,82 @@ background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6)
        </widget>
       </item>
       <item>
-       <widget class="QLabel" name="recentEmpty">
-        <property name="text">
-         <string>Chưa có lịch hẹn</string>
-        </property>
-        <property name="alignment">
-         <set>Qt::AlignCenter</set>
-        </property>
-        <property name="styleSheet">
-         <string notr="true">color: rgba(15,23,42,0.35); font: 700 9pt "Segoe UI";</string>
+       <widget class="QTableWidget" name="appointmentsTable">
+        <property name="columnCount">
+         <number>6</number>
         </property>
         <property name="minimumSize">
          <size>
           <width>0</width>
-          <height>80</height>
+          <height>220</height>
          </size>
+        </property>
+        <attribute name="horizontalHeaderDefaultSectionSize">
+         <number>120</number>
+        </attribute>
+        <column>
+         <property name="text">
+          <string>Thời gian</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Khách hàng</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Thú cưng</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Dịch vụ</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Trạng thái</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Kết quả DV</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="detailTitle">
+        <property name="text">
+         <string>Chi tiết lịch hẹn</string>
+        </property>
+        <property name="styleSheet">
+         <string notr="true">font: 800 10pt "Segoe UI"; margin-top: 8px;</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPlainTextEdit" name="appointmentDetailEdit">
+        <property name="readOnly">
+         <bool>true</bool>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>160</height>
+         </size>
+        </property>
+        <property name="placeholderText">
+         <string>Chọn một dòng trong danh sách lịch hẹn để xem đầy đủ thông tin.</string>
         </property>
        </widget>
       </item>
      </layout>
+    </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
   </layout>

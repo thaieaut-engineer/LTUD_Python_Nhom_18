@@ -5,18 +5,30 @@ from pathlib import Path
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QDateTime, QSize
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QFontMetrics, QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QHeaderView,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
+    QMessageBox,
     QTableWidget,
     QTableWidgetItem,
+    QVBoxLayout,
     QWidget,
 )
 
 from .theme import qss
-from .demo_data import seed_demo
+from .demo_data import Customer, Pet, seed_demo
+
+
+APPOINTMENT_STATUSES = ("Chờ xử lý", "Đang thực hiện", "Hoàn thành")
 
 
 def _repo_root() -> Path:
@@ -38,9 +50,10 @@ class PetCareApp(QMainWindow):
         self._login = uic.loadUi(_ui_path("login.ui"))
         self._main = uic.loadUi(_ui_path("main.ui"))
         self._pages: dict[str, QWidget] = {}
-        self._demo_appointments: list[dict[str, str]] = []
-        self._demo_exams: list[dict[str, str]] = []
+        self._demo_appointments: list[dict[str, str | list[str]]] = []
         self._pet_images: dict[tuple[str, str], str] = {}
+        self._customers: list[Customer] = []
+        self._pets: list[Pet] = []
 
         self.setCentralWidget(self._login)
         self._wire_login()
@@ -66,7 +79,6 @@ class PetCareApp(QMainWindow):
         self._main.navPets.clicked.connect(lambda: self._set_active("pets"))
         self._main.navServices.clicked.connect(lambda: self._set_active("services"))
         self._main.navAppointments.clicked.connect(lambda: self._set_active("appointments"))
-        self._main.navExam.clicked.connect(lambda: self._set_active("exam"))
         self._main.navInvoices.clicked.connect(lambda: self._set_active("invoices"))
         self._main.logoutButton.clicked.connect(self._on_logout)
 
@@ -84,11 +96,16 @@ class PetCareApp(QMainWindow):
         add("pets", "pets.ui")
         add("services", "services.ui")
         add("appointments", "appointments.ui")
-        add("exam", "exam.ui")
+        ap_lay = self._pages["appointments"].layout()
+        if isinstance(ap_lay, QVBoxLayout) and ap_lay.count() >= 2:
+            ap_lay.setStretch(1, 1)
+
         add("invoices", "invoices.ui")
 
     def _seed_demo_data(self) -> None:
         customers, pets, services, appointments, invoices = seed_demo()
+        self._customers = list(customers)
+        self._pets = list(pets)
 
         # ---- Dashboard ----
         dash = self._pages.get("dashboard")
@@ -121,6 +138,7 @@ class PetCareApp(QMainWindow):
             customers_page.searchEdit.textChanged.connect(
                 lambda text: self._filter_table(table, text, cols=(0, 1, 2, 3))
             )
+            customers_page.viewPetsButton.clicked.connect(self._on_view_customer_pets)
 
         # ---- Services table ----
         services_page = self._pages.get("services")
@@ -225,53 +243,27 @@ class PetCareApp(QMainWindow):
 
             ap_page.timeEdit.setDateTime(QDateTime.currentDateTime().addSecs(3600))
 
-            # preload recent
             self._demo_appointments = [
                 {
+                    "customer_id": a.customer_id,
                     "customer": next((c.name for c in customers if c.id == a.customer_id), a.customer_id),
                     "pet": a.pet_name,
+                    "pets": [a.pet_name],
                     "service": a.service_name,
                     "when": a.when.strftime("%d/%m/%Y %H:%M"),
                     "status": a.status,
+                    "result": "",
                 }
                 for a in appointments
             ]
-            self._render_recent_appointments()
+            ap_page.customerCombo.currentIndexChanged.connect(lambda _: self._refresh_appointment_pet_list())
+            self._refresh_appointment_pet_list()
+            ap_page.appointmentsTable.itemChanged.connect(self._on_appointment_result_changed)
+            ap_page.appointmentsTable.itemSelectionChanged.connect(self._on_appointment_selection_changed)
             ap_page.confirmButton.clicked.connect(self._on_demo_confirm_appointment)
-
-        # ---- Exam page ----
-        exam_page = self._pages.get("exam")
-        if exam_page:
-            exam_page.examCustomerCombo.clear()
-            exam_page.examCustomerCombo.addItem("Chọn khách hàng", "")
-            for c in customers:
-                exam_page.examCustomerCombo.addItem(f"{c.name} ({c.phone})", c.id)
-
-            exam_page.examTimeEdit.setDateTime(QDateTime.currentDateTime())
-
-            # preload demo exams
-            self._demo_exams = [
-                {
-                    "when": (QDateTime.currentDateTime().addDays(-1)).toString("dd/MM/yyyy HH:mm"),
-                    "customer": "Nguyễn Thị Lan",
-                    "pet": "Bông",
-                    "temp": "38.7°C",
-                    "weight": "3.1kg",
-                    "diagnosis": "Viêm đường hô hấp nhẹ",
-                    "fee": "0đ",
-                },
-                {
-                    "when": (QDateTime.currentDateTime().addSecs(-7200)).toString("dd/MM/yyyy HH:mm"),
-                    "customer": "Trần Minh Khoa",
-                    "pet": "Lucky",
-                    "temp": "39.2°C",
-                    "weight": "10.5kg",
-                    "diagnosis": "Rối loạn tiêu hoá (theo dõi)",
-                    "fee": "20.000đ",
-                },
-            ]
-            self._render_recent_exams()
-            exam_page.saveExamButton.clicked.connect(self._on_demo_save_exam)
+            self._render_appointments_table()
+            if ap_page.appointmentsTable.rowCount() > 0:
+                ap_page.appointmentsTable.selectRow(0)
 
         # ---- Invoices page ----
         inv_page = self._pages.get("invoices")
@@ -299,72 +291,196 @@ class PetCareApp(QMainWindow):
             text = " ".join((table.item(r, c).text() if table.item(r, c) else "") for c in cols).lower()
             table.setRowHidden(r, q not in text)
 
-    def _render_recent_appointments(self) -> None:
+    def _setup_appointments_table(self, table: QTableWidget) -> None:
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        table.setEditTriggers(
+            QTableWidget.EditTrigger.DoubleClicked | QTableWidget.EditTrigger.EditKeyPressed
+        )
+
+    def _refresh_appointment_pet_list(self) -> None:
         ap_page = self._pages.get("appointments")
         if not ap_page:
             return
-        if not self._demo_appointments:
-            ap_page.recentEmpty.setText("Chưa có lịch hẹn")
+        ap_page.petListWidget.clear()
+        cid = ap_page.customerCombo.currentData()
+        if not cid:
             return
-        last = list(reversed(self._demo_appointments))[:5]
-        lines = [
-            f"- {a['when']} | {a['customer']} | {a['pet']} | {a['service']} | {a['status']}" for a in last
-        ]
-        ap_page.recentEmpty.setText("\n".join(lines))
+        for p in self._pets:
+            if p.owner_id != cid:
+                continue
+            item = QListWidgetItem(p.name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            ap_page.petListWidget.addItem(item)
 
-    def _render_recent_exams(self) -> None:
-        exam_page = self._pages.get("exam")
-        if not exam_page:
+    def _render_appointments_table(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
             return
-        if not self._demo_exams:
-            exam_page.recentExamsLabel.setText("Chưa có phiên khám")
-            return
-        last = list(reversed(self._demo_exams))[:5]
-        lines = [
-            (
-                f"- {e['when']} | {e['customer']} | {e['pet']} | "
-                f"{e['temp']} | {e['weight']} | {e['diagnosis']} | Phí: {e['fee']}"
+        table: QTableWidget = ap_page.appointmentsTable
+        self._setup_appointments_table(table)
+        table.blockSignals(True)
+        table.setRowCount(len(self._demo_appointments))
+        for r, a in enumerate(self._demo_appointments):
+            table.setItem(r, 0, QTableWidgetItem(str(a["when"])))
+            table.setItem(r, 1, QTableWidgetItem(str(a["customer"])))
+            pets_list = a.get("pets")
+            if isinstance(pets_list, list) and pets_list:
+                pet_txt = ", ".join(str(x) for x in pets_list)
+            else:
+                pet_txt = str(a.get("pet", ""))
+            table.setItem(r, 2, QTableWidgetItem(pet_txt))
+            table.setItem(r, 3, QTableWidgetItem(str(a["service"])))
+
+            combo = QComboBox()
+            combo.addItems(APPOINTMENT_STATUSES)
+            st = str(a.get("status", "Chờ xử lý"))
+            idx = combo.findText(st)
+            combo.blockSignals(True)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            combo.blockSignals(False)
+            combo.currentTextChanged.connect(lambda text, row=r: self._on_appt_status_changed(row, text))
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+            table.setCellWidget(r, 4, combo)
+
+            res_item = QTableWidgetItem(str(a.get("result", "")))
+            res_item.setFlags(
+                res_item.flags()
+                | Qt.ItemFlag.ItemIsEditable
+                | Qt.ItemFlag.ItemIsEnabled
+                | Qt.ItemFlag.ItemIsSelectable
             )
-            for e in last
+            table.setItem(r, 5, res_item)
+
+        table.blockSignals(False)
+
+        hdr = table.horizontalHeader()
+        hdr.setStretchLastSection(False)
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        status_w = self._appointment_status_column_width_px(table)
+        table.setColumnWidth(4, status_w)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        for r in range(table.rowCount()):
+            cw = table.cellWidget(r, 4)
+            if isinstance(cw, QComboBox):
+                view = cw.view()
+                if view is not None:
+                    view.setMinimumWidth(max(status_w, 260))
+
+        self._sync_appointment_detail_panel()
+
+    def _format_appointment_detail_text(self, row: int) -> str:
+        a = self._demo_appointments[row]
+        cid = str(a.get("customer_id", ""))
+        cust = next((c for c in self._customers if c.id == cid), None)
+        phone = cust.phone if cust else "—"
+        address = cust.address if cust else "—"
+        cust_id_display = cid or "—"
+        pets_list = a.get("pets")
+        if isinstance(pets_list, list) and pets_list:
+            pets_txt = ", ".join(str(x) for x in pets_list)
+        else:
+            pets_txt = str(a.get("pet", ""))
+        result = str(a.get("result", "")).strip() or "(chưa có)"
+        lines = [
+            f"Thời gian: {a['when']}",
+            f"Khách hàng: {a['customer']}",
+            f"Mã khách hàng: {cust_id_display}",
+            f"Số điện thoại: {phone}",
+            f"Địa chỉ: {address}",
+            f"Thú cưng: {pets_txt}",
+            f"Dịch vụ: {a['service']}",
+            f"Trạng thái: {a['status']}",
+            "",
+            "Kết quả dịch vụ:",
+            result,
         ]
-        exam_page.recentExamsLabel.setText("\n".join(lines))
+        return "\n".join(lines)
 
-    def _on_demo_save_exam(self) -> None:
-        exam_page = self._pages.get("exam")
-        if not exam_page:
+    def _sync_appointment_detail_panel(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
             return
+        edit = ap_page.appointmentDetailEdit
+        row = ap_page.appointmentsTable.currentRow()
+        if row < 0 or row >= len(self._demo_appointments):
+            edit.clear()
+            return
+        edit.setPlainText(self._format_appointment_detail_text(row))
 
-        customer_id = exam_page.examCustomerCombo.currentData()
-        customer_text = exam_page.examCustomerCombo.currentText()
-        if customer_id and "(" in customer_text:
-            customer_text = customer_text.split("(")[0].strip()
-        if not customer_id:
-            customer_text = "Chưa chọn khách hàng"
+    def _sync_appointment_detail_if_current_row(self, row: int) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+        if ap_page.appointmentsTable.currentRow() == row:
+            self._sync_appointment_detail_panel()
 
-        pet = (exam_page.examPetEdit.text() or "").strip() or "Chưa nhập thú cưng"
-        when = exam_page.examTimeEdit.dateTime().toString("dd/MM/yyyy HH:mm")
-        temp = f"{exam_page.tempSpin.value():.1f}°C"
-        weight = f"{exam_page.weightSpin.value():.1f}kg"
-        diagnosis = (exam_page.diagnosisEdit.toPlainText() or "").strip() or "Chưa nhập chẩn đoán"
-        fee_val = int(exam_page.extraFeeSpin.value())
-        fee = f"{fee_val:,}đ".replace(",", ".")
+    def _on_appointment_selection_changed(self) -> None:
+        self._sync_appointment_detail_panel()
 
-        self._demo_exams.append(
-            {
-                "when": when,
-                "customer": customer_text,
-                "pet": pet,
-                "temp": temp,
-                "weight": weight,
-                "diagnosis": diagnosis,
-                "fee": fee,
-            }
-        )
-        self._render_recent_exams()
-        exam_page.examPetEdit.clear()
-        exam_page.symptomsEdit.clear()
-        exam_page.diagnosisEdit.clear()
-        exam_page.extraFeeSpin.setValue(0)
+    def _appointment_status_column_width_px(self, table: QTableWidget) -> int:
+        fm = QFontMetrics(table.font())
+        pad = 52
+        longest = max(fm.horizontalAdvance(s) for s in APPOINTMENT_STATUSES)
+        return max(longest + pad, 210)
+
+    def _on_appt_status_changed(self, row: int, text: str) -> None:
+        if 0 <= row < len(self._demo_appointments):
+            self._demo_appointments[row]["status"] = text
+        self._sync_appointment_detail_if_current_row(row)
+
+    def _on_appointment_result_changed(self, item: QTableWidgetItem) -> None:
+        if item.column() != 5:
+            return
+        row = item.row()
+        if 0 <= row < len(self._demo_appointments):
+            self._demo_appointments[row]["result"] = item.text()
+        self._sync_appointment_detail_if_current_row(row)
+
+    def _on_view_customer_pets(self) -> None:
+        customers_page = self._pages.get("customers")
+        if not customers_page:
+            return
+        table = customers_page.customersTable
+        row = table.currentRow()
+        if row < 0:
+            QMessageBox.information(
+                self,
+                "Thú cưng",
+                "Vui lòng chọn một khách hàng trong danh sách.",
+            )
+            return
+        id_item = table.item(row, 0)
+        name_item = table.item(row, 1)
+        if not id_item:
+            return
+        customer_id = id_item.text()
+        customer_name = name_item.text() if name_item else customer_id
+        pets_row = [p for p in self._pets if p.owner_id == customer_id]
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Thú cưng — {customer_name}")
+        dlg.resize(440, 340)
+        layout = QVBoxLayout(dlg)
+        if not pets_row:
+            layout.addWidget(QLabel("Khách hàng này chưa có thú cưng trong hệ thống."))
+        else:
+            lw = QListWidget()
+            for p in pets_row:
+                lw.addItem(f"{p.name} — {p.species}, {p.breed}, {p.age} tuổi")
+            layout.addWidget(lw)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        buttons.accepted.connect(dlg.accept)
+        layout.addWidget(buttons)
+        dlg.exec()
 
     def _on_demo_confirm_appointment(self) -> None:
         ap_page = self._pages.get("appointments")
@@ -373,7 +489,6 @@ class PetCareApp(QMainWindow):
 
         customer_id = ap_page.customerCombo.currentData()
         service_name = ap_page.serviceCombo.currentData()
-        pet_name = (ap_page.petEdit.text() or "").strip()
         when = ap_page.timeEdit.dateTime().toString("dd/MM/yyyy HH:mm")
 
         customer_text = ap_page.customerCombo.currentText()
@@ -381,23 +496,46 @@ class PetCareApp(QMainWindow):
             customer_text = customer_text.split("(")[0].strip()
 
         if not customer_id:
-            customer_text = "Chưa chọn khách hàng"
+            QMessageBox.warning(self, "Đặt lịch", "Vui lòng chọn khách hàng.")
+            return
         if not service_name:
-            service_name = "Chưa chọn dịch vụ"
-        if not pet_name:
-            pet_name = "Chưa nhập thú cưng"
+            QMessageBox.warning(self, "Đặt lịch", "Vui lòng chọn dịch vụ.")
+            return
 
+        pets_selected: list[str] = []
+        for i in range(ap_page.petListWidget.count()):
+            it = ap_page.petListWidget.item(i)
+            if it and it.checkState() == Qt.CheckState.Checked:
+                pets_selected.append(it.text())
+
+        if not pets_selected:
+            QMessageBox.warning(
+                self,
+                "Đặt lịch",
+                "Vui lòng chọn ít nhất một thú cưng (tích vào danh sách sau khi chọn khách hàng).",
+            )
+            return
+
+        pet_display = ", ".join(pets_selected)
         self._demo_appointments.append(
             {
+                "customer_id": customer_id or "",
                 "customer": customer_text,
-                "pet": pet_name,
+                "pet": pet_display,
+                "pets": pets_selected,
                 "service": service_name,
                 "when": when,
                 "status": "Chờ xử lý",
+                "result": "",
             }
         )
-        self._render_recent_appointments()
-        ap_page.petEdit.clear()
+        self._render_appointments_table()
+        for i in range(ap_page.petListWidget.count()):
+            it = ap_page.petListWidget.item(i)
+            if it:
+                it.setCheckState(Qt.CheckState.Unchecked)
+        if ap_page.appointmentsTable.rowCount() > 0:
+            ap_page.appointmentsTable.selectRow(ap_page.appointmentsTable.rowCount() - 1)
 
     def _on_login(self) -> None:
         self.setCentralWidget(self._main)
@@ -417,7 +555,6 @@ class PetCareApp(QMainWindow):
             "pets": self._main.navPets,
             "services": self._main.navServices,
             "appointments": self._main.navAppointments,
-            "exam": self._main.navExam,
             "invoices": self._main.navInvoices,
         }
         for k, btn in mapping.items():

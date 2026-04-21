@@ -3,13 +3,17 @@
  <class>PetsPage</class>
  <widget class="QWidget" name="PetsPage">
   <property name="styleSheet">
-   <string notr="true">QLabel#PageTitle{font: 800 16pt "Segoe UI";}
-QFrame#Card{background: #FFFFFF; border: 1px solid rgba(15,23,42,0.08); border-radius: 18px;}
-QComboBox{background: rgba(255,255,255,0.95); border: 1px solid rgba(15,23,42,0.08); border-radius: 12px; padding: 10px 12px; font: 600 10pt "Segoe UI";}
+   <string notr="true">QLabel#PageTitle{font: 800 17pt "Segoe UI"; letter-spacing: -0.3px;}
+QFrame#Card{
+background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #faf5ff);
+border: 1px solid rgba(99,102,241,0.12);
+border-radius: 20px;
+}
+QComboBox{background: rgba(255,255,255,0.95); border: 1px solid rgba(99,102,241,0.15); border-radius: 12px; padding: 10px 12px; font: 600 10pt "Segoe UI";}
 QPushButton#PrimaryButton{
 border:0px; border-radius:14px; padding:10px 14px;
 color:white; font: 800 10pt "Segoe UI";
-background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #c026d3);
 }
 QHeaderView::section{background: rgba(15,23,42,0.03); border:0px; padding:10px 12px; font: 700 9pt "Segoe UI"; color: rgba(15,23,42,0.70);}</string>
   </property>
