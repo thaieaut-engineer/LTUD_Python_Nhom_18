@@ -1,3 +1,5 @@
+--File sơ đồ class và ERD nằm trong thư mục assets
+
 Mô tả các chức năng của ứng dụng
 1. Mục tiêu hệ thống
 
