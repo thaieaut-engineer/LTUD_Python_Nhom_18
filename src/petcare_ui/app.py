@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QDateTime, QSize
-from PyQt6.QtGui import QFontMetrics, QIcon, QPixmap
+from PyQt6.QtCore import Qt, QDateTime, QEvent, QSize
+from PyQt6.QtGui import QFontMetrics, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -31,7 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .theme import qss
+from .theme import background_image_path, qss
 from .demo_data import Customer, Pet, seed_demo
 
 
@@ -44,6 +44,60 @@ def _repo_root() -> Path:
 
 def _ui_path(name: str) -> str:
     return str(_repo_root() / "ui" / name)
+
+
+class PetBackground(QLabel):
+    """Ảnh nền thú cưng tự động scale theo kích thước parent (cover + overlay)."""
+
+    def __init__(
+        self,
+        parent: QWidget,
+        image_path: str,
+        overlay_color: tuple[int, int, int, int] = (239, 246, 255, 170),
+    ) -> None:
+        super().__init__(parent)
+        self._pix = QPixmap(image_path)
+        self._overlay = overlay_color
+        self.setScaledContents(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.lower()
+        parent.installEventFilter(self)
+        self._sync_geometry()
+
+    def _sync_geometry(self) -> None:
+        p = self.parentWidget()
+        if p is None:
+            return
+        self.setGeometry(0, 0, p.width(), p.height())
+        self.update()
+
+    def eventFilter(self, obj, event):  # type: ignore[override]
+        if event.type() == QEvent.Type.Resize:
+            self._sync_geometry()
+        return False
+
+    def paintEvent(self, _event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        if not self._pix.isNull():
+            scaled = self._pix.scaled(
+                self.size(),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            x = (self.width() - scaled.width()) // 2
+            y = (self.height() - scaled.height()) // 2
+            painter.drawPixmap(x, y, scaled)
+        r, g, b, a = self._overlay
+        if a > 0:
+            painter.fillRect(self.rect(), self._qcolor(r, g, b, a))
+        painter.end()
+
+    @staticmethod
+    def _qcolor(r: int, g: int, b: int, a: int):
+        from PyQt6.QtGui import QColor
+
+        return QColor(r, g, b, a)
 
 
 class PetCareApp(QMainWindow):
@@ -67,13 +121,37 @@ class PetCareApp(QMainWindow):
         self._per_pet_service_rows_layout: QVBoxLayout | None = None
         self._per_pet_service_combos: dict[str, QComboBox] = {}
 
+        self._bg_path: str = background_image_path()
+
         self.setCentralWidget(self._login)
         self._wire_login()
         self._wire_main()
 
+        self._install_backgrounds()
+
         self._load_pages()
         self._set_active("dashboard")
         self._seed_demo_data()
+
+    def _install_pet_background(
+        self,
+        widget: QWidget,
+        overlay_color: tuple[int, int, int, int] = (239, 246, 255, 140),
+    ) -> PetBackground | None:
+        if not self._bg_path or not Path(self._bg_path).exists():
+            return None
+        return PetBackground(widget, self._bg_path, overlay_color=overlay_color)
+
+    def _install_backgrounds(self) -> None:
+        login_root = self._login.findChild(QWidget, "LoginPage") or self._login
+        self._install_pet_background(login_root, overlay_color=(11, 30, 63, 155))
+
+        app_root = self._main.centralWidget()
+        if app_root is not None:
+            app_root.setObjectName("AppRoot")
+            app_root.style().unpolish(app_root)
+            app_root.style().polish(app_root)
+            self._install_pet_background(app_root, overlay_color=(239, 246, 255, 60))
 
     def _apply_theme(self) -> None:
         app = QApplication.instance()
@@ -616,6 +694,7 @@ class PetCareApp(QMainWindow):
         dlg.setWindowTitle("Thêm khách hàng mới")
         dlg.setMinimumWidth(560)
         dlg.resize(600, 620)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
 
         layout = QVBoxLayout(dlg)
         layout.setSpacing(12)
@@ -870,6 +949,7 @@ class PetCareApp(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle("Thêm thú cưng")
         dlg.setMinimumWidth(440)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
 
         layout = QVBoxLayout(dlg)
 
@@ -993,6 +1073,7 @@ class PetCareApp(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Thú cưng — {customer_name}")
         dlg.resize(440, 340)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
         layout = QVBoxLayout(dlg)
         if not pets_row:
             layout.addWidget(QLabel("Khách hàng này chưa có thú cưng trong hệ thống."))

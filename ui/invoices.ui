@@ -3,13 +3,7 @@
  <class>InvoicesPage</class>
  <widget class="QWidget" name="InvoicesPage">
   <property name="styleSheet">
-   <string notr="true">QLabel#PageTitle{font: 800 17pt "Segoe UI"; letter-spacing: -0.3px;}
-QPushButton#PrimaryButton{
-border:0px; border-radius:14px; padding:10px 14px;
-color:white; font: 800 10pt "Segoe UI";
-background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #6366F1, stop:1 #c026d3);
-}
-QLabel#Muted{color: rgba(15,23,42,0.40); font: 700 10pt "Segoe UI";}</string>
+   <string notr="true">QLabel#Muted{color: #64748B; font: 600 10pt "Segoe UI";}</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="leftMargin">

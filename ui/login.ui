@@ -14,54 +14,73 @@
   <property name="styleSheet">
    <string notr="true">QWidget#LoginPage{
 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-  stop:0 #1e1b4b, stop:0.4 #4338ca, stop:0.75 #7c3aed, stop:1 #c026d3);
+  stop:0 #0B1E3F, stop:0.35 #15306B, stop:0.7 #2563EB, stop:1 #F472B6);
+}
+QWidget#LoginPage QLabel{
+background: transparent;
 }
 QFrame#LoginCard{
-background: rgba(255,255,255,0.14);
+background: rgba(255,255,255,0.12);
 border: 1px solid rgba(255,255,255,0.22);
-border-radius: 22px;
+border-radius: 20px;
 }
-QLineEdit{
-background: rgba(255,255,255,0.15);
-border: 1px solid rgba(255,255,255,0.10);
-border-radius: 12px;
-padding: 10px 12px;
-color: rgba(255,255,255,0.92);
-font: 600 11pt "Segoe UI";
+QFrame#LoginCard QLabel{
+background: transparent;
+}
+QFrame#LoginCard QLineEdit{
+background: rgba(255,255,255,0.14);
+border: 1px solid rgba(255,255,255,0.18);
+border-radius: 10px;
+padding: 11px 14px;
+color: #FFFFFF;
+font: 500 11pt "Segoe UI";
+selection-background-color: rgba(244,114,182,0.45);
+min-height: 22px;
+}
+QFrame#LoginCard QLineEdit:hover{
+background: rgba(255,255,255,0.18);
+border: 1px solid rgba(191,219,254,0.55);
+}
+QFrame#LoginCard QLineEdit:focus{
+background: rgba(255,255,255,0.22);
+border: 1px solid rgba(191,219,254,0.95);
 }
 QLabel#Title{
-color: rgba(255,255,255,0.95);
+color: #FFFFFF;
 font: 900 24pt "Segoe UI";
+letter-spacing: -0.5px;
 }
 QLabel#Subtitle{
-color: rgba(255,255,255,0.70);
-font: 600 10pt "Segoe UI";
+color: rgba(219,234,254,0.85);
+font: 500 10pt "Segoe UI";
 }
 QLabel#FieldLabel{
-color: rgba(255,255,255,0.75);
+color: rgba(219,234,254,0.90);
 font: 700 9pt "Segoe UI";
+letter-spacing: 0.4px;
 }
 QPushButton#LoginButton{
 border: 0px;
-border-radius: 14px;
-color: white;
+border-radius: 12px;
+color: #FFFFFF;
 font: 800 11pt "Segoe UI";
-padding: 10px 14px;
-background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+letter-spacing: 0.3px;
+padding: 11px 16px;
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:0.6 #3B82F6, stop:1 #F472B6);
 }
 QPushButton#LoginButton:hover{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #818cf8, stop:1 #e879f9);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1D4ED8, stop:0.6 #2563EB, stop:1 #EC4899);
 }
 QPushButton#LoginButton:pressed{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366f1, stop:1 #c026d3);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E40AF, stop:1 #DB2777);
 }
 QLabel#Hint{
-color: rgba(255,255,255,0.35);
-font: 600 9pt "Segoe UI";
+color: rgba(219,234,254,0.55);
+font: 500 9pt "Segoe UI";
 }
 QFrame#Logo{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255,255,255,0.28), stop:1 rgba(255,255,255,0.08));
-border: 1px solid rgba(255,255,255,0.2);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255,255,255,0.32), stop:1 rgba(244,114,182,0.18));
+border: 1px solid rgba(255,255,255,0.26);
 border-radius: 20px;
 }</string>
   </property>

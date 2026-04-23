@@ -3,34 +3,33 @@
  <class>DashboardPage</class>
  <widget class="QWidget" name="DashboardPage">
   <property name="styleSheet">
-   <string notr="true">QLabel#PageTitle{font: 800 17pt "Segoe UI"; letter-spacing: -0.3px;}
-QFrame#Card{
-background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #faf5ff);
-border: 1px solid rgba(99,102,241,0.12);
-border-radius: 20px;
+   <string notr="true">QFrame#Card{
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #FFFFFF, stop:0.6 #F6FAFF, stop:1 #FFF3F8);
+border: 1px solid #D6E2F7;
+border-radius: 16px;
 }
 QFrame#StatBlue{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #6366f1, stop:1 #4f46e5);
-border-radius: 20px;
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3B82F6, stop:1 #1D4ED8);
+border-radius: 18px;
 border: none;
 }
 QFrame#StatOrange{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #fbbf24, stop:1 #ea580c);
-border-radius: 20px;
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #60A5FA, stop:1 #2563EB);
+border-radius: 18px;
 border: none;
 }
 QFrame#StatGreen{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #34d399, stop:1 #059669);
-border-radius: 20px;
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #7DD3FC, stop:1 #0EA5E9);
+border-radius: 18px;
 border: none;
 }
 QFrame#StatPink{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #f472b6, stop:1 #db2777);
-border-radius: 20px;
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #F9A8D4, stop:1 #EC4899);
+border-radius: 18px;
 border: none;
 }
-QLabel#StatTitle{color: rgba(255,255,255,0.92); font: 700 9pt "Segoe UI";}
-QLabel#StatValue{color: white; font: 900 20pt "Segoe UI"; letter-spacing: -0.5px;}</string>
+QLabel#StatTitle{color: rgba(255,255,255,0.94); font: 700 9pt "Segoe UI"; background: transparent;}
+QLabel#StatValue{color: #FFFFFF; font: 900 20pt "Segoe UI"; letter-spacing: -0.5px; background: transparent;}</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="leftMargin">
