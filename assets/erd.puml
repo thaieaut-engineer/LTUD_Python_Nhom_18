@@ -1,0 +1,128 @@
+@startuml erd_petcare
+title ERD - Quản lý dịch vụ chăm sóc thú cưng
+
+!define PK(x) <b><color:#B8860B>x</color></b>
+!define FK(x) <i><color:#2E5C8A>x</color></i>
+!define UK(x) <u>x</u>
+
+skinparam dpi 150
+skinparam shadowing false
+skinparam linetype ortho
+skinparam entity {
+  BackgroundColor #F5F9FF
+  BorderColor #2E5C8A
+  FontName Segoe UI
+}
+hide circle
+hide methods
+hide stereotypes
+
+entity ROLE {
+  PK(id) : INT
+  --
+  name : VARCHAR(20)
+}
+
+entity "USER" as USER {
+  PK(id) : INT
+  --
+  FK(role_id) : INT
+  UK(username) : VARCHAR(50)
+  password_hash : VARCHAR(255)
+  full_name : VARCHAR(100)
+  phone : VARCHAR(20)
+  is_active : BOOLEAN
+  created_at : DATETIME
+}
+
+entity CUSTOMER {
+  PK(id) : INT
+  --
+  full_name : VARCHAR(100)
+  UK(phone) : VARCHAR(20)
+  address : VARCHAR(255)
+  created_at : DATETIME
+}
+
+entity PET {
+  PK(id) : INT
+  --
+  FK(customer_id) : INT
+  name : VARCHAR(50)
+  species : VARCHAR(30)
+  breed : VARCHAR(50)
+  age : INT
+  health_note : TEXT
+}
+
+entity SERVICE {
+  PK(id) : INT
+  --
+  UK(name) : VARCHAR(100)
+  price : DECIMAL(12,2)
+  description : TEXT
+  is_active : BOOLEAN
+}
+
+entity APPOINTMENT {
+  PK(id) : INT
+  --
+  FK(customer_id) : INT
+  FK(pet_id) : INT
+  scheduled_at : DATETIME
+  status : VARCHAR(20)
+  note : TEXT
+  created_at : DATETIME
+}
+
+entity APPOINTMENT_SERVICE {
+  PK FK(appointment_id) : INT
+  PK FK(service_id) : INT
+  --
+  quantity : INT
+  unit_price : DECIMAL(12,2)
+}
+
+entity INVOICE {
+  PK(id) : INT
+  --
+  FK UK(appointment_id) : INT
+  UK(invoice_no) : VARCHAR(30)
+  issued_at : DATETIME
+  total_amount : DECIMAL(14,2)
+  discount_amount : DECIMAL(14,2)
+  payment_status : VARCHAR(20)
+}
+
+entity INVOICE_ITEM {
+  PK(id) : INT
+  --
+  FK(invoice_id) : INT
+  FK(service_id) : INT
+  quantity : INT
+  unit_price : DECIMAL(12,2)
+}
+
+entity PAYMENT {
+  PK(id) : INT
+  --
+  FK(invoice_id) : INT
+  amount : DECIMAL(14,2)
+  method : VARCHAR(20)
+  paid_at : DATETIME
+  note : VARCHAR(255)
+}
+
+' ============ RELATIONSHIPS (crow's foot) ============
+ROLE        ||--o{ USER                : has
+CUSTOMER    ||--o{ PET                 : owns
+CUSTOMER    ||--o{ APPOINTMENT         : books
+PET         ||--o{ APPOINTMENT         : for
+APPOINTMENT ||--o{ APPOINTMENT_SERVICE : includes
+SERVICE     ||--o{ APPOINTMENT_SERVICE : chosen_in
+APPOINTMENT ||--o| INVOICE             : generates
+INVOICE     ||--o{ INVOICE_ITEM        : contains
+SERVICE     ||--o{ INVOICE_ITEM        : billed
+INVOICE     ||--o{ PAYMENT             : paid_by
+
+@enduml

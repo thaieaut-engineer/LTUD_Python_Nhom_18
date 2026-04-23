@@ -1,0 +1,169 @@
+@startuml class_diagram_petcare
+title CLASS DIAGRAM (UML) - Quản lý dịch vụ chăm sóc thú cưng
+
+skinparam dpi 150
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #D6E4F0
+  BorderColor #2E5C8A
+  ArrowColor #2E5C8A
+  FontName Segoe UI
+}
+skinparam legend {
+  BackgroundColor #FAFAFA
+  BorderColor #999999
+}
+skinparam linetype ortho
+left to right direction
+
+legend right
+|= Ký hiệu |= Quan hệ |
+| <b>──▷</b> | Generalization (Kế thừa) |
+| <b>┄┄▷</b> | Realization (Hiện thực interface) |
+| <b>◆──</b> | Composition (Hợp thành) |
+| <b>◇──</b> | Aggregation (Gộp hợp) |
+| <b>───</b> | Association (Liên kết) |
+| <b>┄┄></b> «use» | Dependency (Phụ thuộc) |
+endlegend
+
+' ===================== CLASSES =====================
+
+interface IPrintable {
+  + print() : void
+  + exportPdf() : void
+}
+
+abstract class User {
+  - id : int
+  - username : string
+  - passwordHash : string
+  - fullName : string
+  - phone : string
+  - isActive : bool
+  + login() : bool
+  + changePassword() : void
+}
+
+class Admin {
+  + manageUsers() : void
+  + viewReports() : void
+}
+
+class Employee {
+  - position : string
+  + handleAppointment() : void
+  + createInvoice() : Invoice
+}
+
+class Customer {
+  - id : int
+  - fullName : string
+  - phone : string
+  - address : string
+  - createdAt : datetime
+  + addPet(p : Pet) : void
+  + bookAppointment() : Appointment
+}
+
+class Pet {
+  - id : int
+  - name : string
+  - species : string
+  - breed : string
+  - age : int
+  - healthNote : string
+}
+
+class Service {
+  - id : int
+  - name : string
+  - price : decimal
+  - description : string
+  - isActive : bool
+}
+
+class Appointment {
+  - id : int
+  - scheduledAt : datetime
+  - status : Status
+  - note : string
+  + addService(s : Service) : void
+  + complete() : void
+  + cancel() : void
+}
+
+class AppointmentService {
+  - quantity : int
+  - unitPrice : decimal
+  + lineTotal() : decimal
+}
+
+class Invoice {
+  - id : int
+  - invoiceNo : string
+  - issuedAt : datetime
+  - totalAmount : decimal
+  - discountAmount : decimal
+  - paymentStatus : enum
+  + calculateTotal() : decimal
+  + print() : void
+  + exportPdf() : void
+}
+
+class InvoiceItem {
+  - quantity : int
+  - unitPrice : decimal
+  + lineTotal() : decimal
+}
+
+class Payment {
+  - id : int
+  - amount : decimal
+  - method : enum
+  - paidAt : datetime
+  - note : string
+}
+
+class "«service»\nAuthService" as AuthService {
+  + login(u, p) : User
+  + logout() : void
+}
+
+class "«service»\nReportService" as ReportService {
+  + revenueByDay() : Report
+  + revenueByMonth() : Report
+  + popularServices() : List
+}
+
+' ===================== RELATIONSHIPS =====================
+
+' Generalization
+User <|-- Admin
+User <|-- Employee
+
+' Realization
+IPrintable <|.. Invoice
+
+' Aggregation (Customer "has" Pet - weak ownership)
+Customer "1" o-- "0..*" Pet : owns
+
+' Composition (strong ownership - parts die with whole)
+Appointment "1" *-- "1..*" AppointmentService : includes
+Invoice     "1" *-- "1..*" InvoiceItem        : contains
+
+' Association
+Customer    "1" -- "0..*" Appointment : books
+Pet         "1" -- "0..*" Appointment : for
+Service     "1" -- "0..*" AppointmentService : chosen
+Service     "1" -- "0..*" InvoiceItem : billed
+Appointment "1" -- "0..1" Invoice : generates
+Invoice     "1" -- "0..*" Payment : paidBy
+
+' Dependency
+AuthService   ..> User        : «use»
+ReportService ..> Invoice     : «use»
+ReportService ..> Appointment : «use»
+Employee      ..> Invoice     : «create»
+
+@enduml
