@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
 
 from .theme import background_image_path, qss
 from .demo_data import Customer, Pet, seed_demo
+from .pages.dashboard import DashboardView
 from src.petcare_backend.services import auth_service
 from src.petcare_backend.session import Session
 
@@ -201,7 +202,12 @@ class PetCareApp(QMainWindow):
             stack.addWidget(w)
             self._pages[key] = w
 
-        add("dashboard", "dashboard.ui")
+        def add_widget(key: str, widget: QWidget) -> None:
+            widget.setProperty("page_key", key)
+            stack.addWidget(widget)
+            self._pages[key] = widget
+
+        add_widget("dashboard", DashboardView())
         add("customers", "customers.ui")
         add("pets", "pets.ui")
         add("services", "services.ui")
@@ -218,20 +224,14 @@ class PetCareApp(QMainWindow):
         self._pets = list(pets)
 
         # ---- Dashboard ----
+        # DashboardView tu lay du lieu tu report_service khi load. O day chi
+        # goi reload() de lam moi lai sau khi seed demo (neu co).
         dash = self._pages.get("dashboard")
-        if dash:
-            customers_count = len(customers)
-            pets_count = len(pets)
-            today = QDateTime.currentDateTime().date().toPyDate()
-            revenue_today = sum(
-                inv.total for inv in invoices if inv.paid and inv.created_at.date() == today
-            )
-            appt_today = sum(1 for ap in appointments if ap.when.date() == today)
-
-            dash.blueValue.setText(f"{revenue_today:,}đ".replace(",", "."))
-            dash.orangeValue.setText(str(pets_count))
-            dash.greenValue.setText(str(customers_count))
-            dash.pinkValue.setText(str(appt_today))
+        if isinstance(dash, DashboardView):
+            try:
+                dash.reload()
+            except Exception:
+                pass
 
         # ---- Customers table ----
         customers_page = self._pages.get("customers")
@@ -1341,5 +1341,10 @@ class PetCareApp(QMainWindow):
             w = stack.widget(i)
             if w.property("page_key") == key:
                 stack.setCurrentIndex(i)
+                if key == "dashboard" and isinstance(w, DashboardView):
+                    try:
+                        w.reload()
+                    except Exception:
+                        pass
                 return
 
