@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QPlainTextEdit,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -37,11 +38,13 @@ from .pages.dashboard import DashboardView
 from src.petcare_backend.services import auth_service
 from src.petcare_backend.services import customer_service, pet_service, service_service
 from src.petcare_backend.services import user_service
+from src.petcare_backend.services import appointment_service
+from src.petcare_backend.services import invoice_service, payment_service
 from src.petcare_backend.models import Customer, Pet, Service
 from src.petcare_backend.session import Session
 
 
-APPOINTMENT_STATUSES = ("Chờ xử lý", "Đang thực hiện", "Hoàn thành")
+APPOINTMENT_STATUSES = ("Chờ xử lý", "Đang thực hiện", "Hoàn thành", "Hủy")
 
 
 def _repo_root() -> Path:
@@ -117,6 +120,7 @@ class PetCareApp(QMainWindow):
         self._login = uic.loadUi(_ui_path("login.ui"))
         self._main = uic.loadUi(_ui_path("main.ui"))
         self._pages: dict[str, QWidget] = {}
+        # demo list cu - da thay bang DB rows (_appointments_rows)
         self._demo_appointments: list[dict[str, str | list[str]]] = []
         self._pet_images: dict[tuple[int, int], str] = {}
         self._customers: list[Customer] = []
@@ -282,7 +286,7 @@ class PetCareApp(QMainWindow):
         add("invoices", "invoices.ui")
 
     def _init_catalog_pages(self) -> None:
-        """Khoi tao cac page danh muc (B2/B3/B4). Du lieu se load sau login."""
+        """Khoi tao cac page danh muc (B2/B3/B4) + nghiep vu (C1-C3). Du lieu se load sau login."""
         customers_page = self._pages.get("customers")
         if customers_page:
             table: QTableWidget = customers_page.customersTable
@@ -307,6 +311,42 @@ class PetCareApp(QMainWindow):
             pets_page.addPetButton.clicked.connect(self._on_add_pet_clicked)
             table.cellDoubleClicked.connect(self._on_pet_image_double_clicked)
 
+        ap_page = self._pages.get("appointments")
+        if ap_page:
+            # services combo
+            ap_page.serviceCombo.clear()
+            ap_page.serviceCombo.addItem("Chọn dịch vụ", 0)
+            for s in self._services_list:
+                ap_page.serviceCombo.addItem(f"{s.name} ({int(s.price):,}đ)".replace(",", "."), s.id)
+
+            self._build_per_pet_service_container(ap_page)
+            ap_page.timeEdit.setDateTime(QDateTime.currentDateTime().addSecs(3600))
+
+            ap_page.customerCombo.currentIndexChanged.connect(lambda _: self._refresh_appointment_pet_list())
+            ap_page.petListWidget.itemChanged.connect(self._on_appointment_pet_check_changed)
+            ap_page.confirmButton.clicked.connect(self._on_confirm_appointment_db)
+            if hasattr(ap_page, "addNewCustomerButton"):
+                ap_page.addNewCustomerButton.clicked.connect(self._on_quick_add_customer_for_appointment)
+
+            table: QTableWidget = ap_page.appointmentsTable
+            self._setup_appointments_table(table)
+            # Bang chi hien thong tin, khong edit truc tiep (doi trang thai trong dialog chi tiet)
+            # Bo panel chi tiet ben duoi -> khong can itemSelectionChanged nua
+            # Mo chi tiet bang click 1 lan (an toan hon double click)
+            table.cellClicked.connect(lambda r, c: self._on_appointment_row_clicked(r, c))
+
+            # an luon panel chi tiet ben duoi danh sach
+            if hasattr(ap_page, "detailTitle"):
+                ap_page.detailTitle.setVisible(False)
+            if hasattr(ap_page, "appointmentDetailEdit"):
+                ap_page.appointmentDetailEdit.setVisible(False)
+
+        inv_page = self._pages.get("invoices")
+        if inv_page:
+            if hasattr(inv_page, "createInvoiceButton"):
+                inv_page.createInvoiceButton.clicked.connect(self._show_invoice_center)
+            self._install_invoices_table(inv_page)
+
     def _reload_catalog_data(self) -> None:
         """Load khach hang/thu cung/dich vu tu MySQL va render UI."""
         self._reload_customers(None)
@@ -314,6 +354,8 @@ class PetCareApp(QMainWindow):
         self._reload_pets()
         self._refresh_pets_customer_filter()
         self._refresh_appointments_customer_combo()
+        self._reload_appointments_table()
+        self._reload_invoices_table()
 
         dash = self._pages.get("dashboard")
         if isinstance(dash, DashboardView):
@@ -321,6 +363,281 @@ class PetCareApp(QMainWindow):
                 dash.reload()
             except Exception:
                 pass
+
+    def _install_invoices_table(self, inv_page: QWidget) -> None:
+        """Invoices UI chi co emptyLabel -> chen runtime table."""
+        if hasattr(inv_page, "invoicesTable"):
+            return
+        layout = inv_page.layout()
+        if layout is None:
+            return
+        table = QTableWidget()
+        table.setObjectName("invoicesTable")
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(
+            ["Mã HĐ", "Ngày", "Khách hàng", "Thú cưng", "Tổng tiền", "Trạng thái", "Thao tác"]
+        )
+        self._setup_table(table)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(table, 1)
+        inv_page.invoicesTable = table  # type: ignore[attr-defined]
+
+        if hasattr(inv_page, "emptyLabel"):
+            inv_page.emptyLabel.setVisible(False)
+
+    def _reload_invoices_table(self) -> None:
+        inv_page = self._pages.get("invoices")
+        if not inv_page or not hasattr(inv_page, "invoicesTable"):
+            return
+        rows = invoice_service.list_recent(limit=150)
+        self._invoice_rows = rows  # type: ignore[attr-defined]
+
+        table: QTableWidget = inv_page.invoicesTable
+        table.setRowCount(len(rows))
+        for r, i in enumerate(rows):
+            table.setItem(r, 0, QTableWidgetItem(str(i.get("invoice_no", ""))))
+            issued = i.get("issued_at")
+            issued_txt = issued.strftime("%d/%m/%Y %H:%M") if issued else ""
+            table.setItem(r, 1, QTableWidgetItem(issued_txt))
+            table.setItem(r, 2, QTableWidgetItem(str(i.get("customer_name", ""))))
+            table.setItem(r, 3, QTableWidgetItem(str(i.get("pet_name", ""))))
+            total = float(i.get("total_amount") or 0)
+            table.setItem(r, 4, QTableWidgetItem(f"{int(total):,}đ".replace(",", ".")))
+            status = str(i.get("payment_status", "CHUA_TT"))
+            status_label = "Đã TT" if status == "DA_TT" else ("Chưa TT" if status == "CHUA_TT" else status)
+            table.setItem(r, 5, QTableWidgetItem(status_label))
+
+            invoice_id = int(i["invoice_id"])
+            table.setCellWidget(
+                r,
+                6,
+                self._make_invoice_actions(invoice_id=invoice_id),
+            )
+
+        hdr = table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+
+    def _make_invoice_actions(self, *, invoice_id: int) -> QWidget:
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        btn_view = QPushButton("Xem")
+        btn_view.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_view.setStyleSheet(
+            "QPushButton{background:#EEF2FF;color:#3730A3;border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
+            "QPushButton:hover{background:#E0E7FF;}"
+        )
+        btn_view.clicked.connect(lambda: self._show_invoice_detail(invoice_id))
+
+        btn_pay = QPushButton("Thanh toán")
+        btn_pay.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_pay.setStyleSheet(
+            "QPushButton{background:#DCFCE7;color:#166534;border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
+            "QPushButton:hover{background:#BBF7D0;}"
+        )
+        btn_pay.clicked.connect(lambda: self._show_payment_dialog(invoice_id))
+
+        lay.addWidget(btn_view)
+        lay.addWidget(btn_pay)
+        return w
+
+    def _show_invoice_center(self) -> None:
+        """Nut 'Tao hoa don' -> mo dialog chon appointment hoan thanh chua co invoice."""
+        self._show_create_invoice_dialog()
+
+    def _show_create_invoice_dialog(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Tạo hoá đơn từ lịch hẹn")
+        dlg.resize(860, 520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        root = QVBoxLayout(dlg)
+        root.setSpacing(10)
+
+        info = QLabel("Chọn lịch hẹn đã Hoàn thành để tạo hoá đơn.")
+        info.setStyleSheet("color:#334155; font:700 9pt 'Segoe UI';")
+        root.addWidget(info)
+
+        table = QTableWidget()
+        table.setColumnCount(6)
+        table.setHorizontalHeaderLabels(["ID", "Thời gian", "Khách hàng", "Thú cưng", "Dịch vụ", "Trạng thái"])
+        self._setup_table(table)
+        root.addWidget(table, 1)
+
+        # load candidates
+        rows = appointment_service.list_recent(limit=200)
+        candidates = []
+        for a in rows:
+            if a.get("status") == "HOAN_THANH":
+                candidates.append(a)
+        table.setRowCount(len(candidates))
+        for r, a in enumerate(candidates):
+            appt_id = int(a["appointment_id"])
+            table.setItem(r, 0, QTableWidgetItem(str(appt_id)))
+            when_txt = a["scheduled_at"].strftime("%d/%m/%Y %H:%M") if a.get("scheduled_at") else ""
+            table.setItem(r, 1, QTableWidgetItem(when_txt))
+            table.setItem(r, 2, QTableWidgetItem(str(a.get("customer_name", ""))))
+            table.setItem(r, 3, QTableWidgetItem(str(a.get("pet_name", ""))))
+            table.setItem(r, 4, QTableWidgetItem(str(a.get("service_name", ""))))
+            table.setItem(r, 5, QTableWidgetItem(str(a.get("status_label", ""))))
+            # store id
+            table.item(r, 0).setData(Qt.ItemDataRole.UserRole, appt_id)
+
+        hdr = table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Tạo hoá đơn")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            row = table.currentRow()
+            if row < 0:
+                QMessageBox.warning(dlg, "Tạo hoá đơn", "Vui lòng chọn 1 lịch hẹn.")
+                return
+            id_item = table.item(row, 0)
+            appt_id = id_item.data(Qt.ItemDataRole.UserRole) if id_item else None
+            if not isinstance(appt_id, int):
+                return
+            try:
+                inv_id = invoice_service.create_from_appointment(appt_id)
+            except Exception as exc:
+                QMessageBox.warning(dlg, "Tạo hoá đơn", str(exc))
+                return
+            QMessageBox.information(dlg, "Tạo hoá đơn", f"Đã tạo hoá đơn (ID: {inv_id}).")
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        root.addWidget(buttons)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._reload_invoices_table()
+
+    def _show_invoice_detail(self, invoice_id: int) -> None:
+        from src.petcare_backend.dao import invoice_item_dao
+        from src.petcare_backend.invoice_export import export_invoice_pdf, ExportError
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Chi tiết hoá đơn #{invoice_id}")
+        dlg.resize(760, 520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        root = QVBoxLayout(dlg)
+        root.setSpacing(10)
+
+        items = invoice_item_dao.list_by_invoice(invoice_id)
+        top_bar = QHBoxLayout()
+        top_bar.addStretch(1)
+        btn_export = QPushButton("Xuất PDF")
+        btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_export.setStyleSheet(
+            "QPushButton{background:#2563EB;color:white;border:none;padding:6px 14px;border-radius:8px;font:800 9pt 'Segoe UI';}"
+            "QPushButton:hover{background:#1D4ED8;}"
+        )
+        top_bar.addWidget(btn_export)
+        root.addLayout(top_bar)
+
+        table = QTableWidget()
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["Thú cưng", "Dịch vụ", "SL", "Đơn giá", "Thành tiền"])
+        self._setup_table(table)
+        table.setRowCount(len(items))
+        for r, it in enumerate(items):
+            table.setItem(r, 0, QTableWidgetItem(str(it.get("pet_name") or "—")))
+            table.setItem(r, 1, QTableWidgetItem(str(it.get("service_name", ""))))
+            table.setItem(r, 2, QTableWidgetItem(str(it.get("quantity", ""))))
+            table.setItem(r, 3, QTableWidgetItem(f"{int(float(it.get('unit_price') or 0)):,}đ".replace(",", ".")))
+            table.setItem(r, 4, QTableWidgetItem(f"{int(float(it.get('line_total') or 0)):,}đ".replace(",", ".")))
+        hdr = table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        root.addWidget(table, 1)
+
+        def _on_export() -> None:
+            default_name = f"invoice_{invoice_id}.pdf"
+            path, _ = QFileDialog.getSaveFileName(dlg, "Lưu hóa đơn PDF", default_name, "PDF (*.pdf)")
+            if not path:
+                return
+            try:
+                export_invoice_pdf(invoice_id, path)
+            except ExportError as exc:
+                QMessageBox.warning(dlg, "Xuất PDF", str(exc))
+                return
+            except Exception as exc:
+                QMessageBox.critical(dlg, "Xuất PDF", str(exc))
+                return
+            QMessageBox.information(dlg, "Xuất PDF", f"Đã xuất PDF:\n{path}")
+
+        btn_export.clicked.connect(_on_export)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dlg.reject)
+        buttons.accepted.connect(dlg.accept)
+        root.addWidget(buttons)
+        dlg.exec()
+
+    def _show_payment_dialog(self, invoice_id: int) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Thanh toán hoá đơn #{invoice_id}")
+        dlg.setMinimumWidth(520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        root = QVBoxLayout(dlg)
+        form = QFormLayout()
+        amount = QLineEdit()
+        method = QComboBox()
+        method.addItem("Tiền mặt")
+        method.addItem("Chuyển khoản")
+        method.addItem("Thẻ")
+        note = QLineEdit()
+        form.addRow("Số tiền *", amount)
+        form.addRow("Phương thức", method)
+        form.addRow("Ghi chú", note)
+        root.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Thanh toán")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                payment_service.add_payment(invoice_id, amount.text(), method.currentText(), note.text())
+            except Exception as exc:
+                QMessageBox.warning(dlg, "Thanh toán", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        root.addWidget(buttons)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._reload_invoices_table()
 
     def _insert_add_customer_button(self, customers_page: QWidget) -> None:
         """CustomersPage khong co nut 'Them' trong .ui, nen chen runtime."""
@@ -372,13 +689,13 @@ class PetCareApp(QMainWindow):
         ap_page.petListWidget.blockSignals(True)
         ap_page.petListWidget.clear()
         cid = ap_page.customerCombo.currentData()
-        if cid:
-            for p in self._pets:
-                if p.customer_id != cid:
-                    continue
+        if isinstance(cid, int) and cid:
+            pets = pet_service.list_pets(customer_id=cid)
+            for p in pets:
                 item = QListWidgetItem(p.name)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Unchecked)
+                item.setData(Qt.ItemDataRole.UserRole, p.id)
                 ap_page.petListWidget.addItem(item)
         ap_page.petListWidget.blockSignals(False)
         self._update_per_pet_service_ui()
@@ -466,13 +783,13 @@ class PetCareApp(QMainWindow):
             lbl.setMinimumWidth(110)
 
             combo = QComboBox()
-            combo.addItem("Chọn dịch vụ", "")
+            combo.addItem("Chọn dịch vụ", 0)
             for s in self._services_list:
                 combo.addItem(
-                    f"{s.name} ({s.price:,}đ)".replace(",", "."), s.name
+                    f"{s.name} ({int(s.price):,}đ)".replace(",", "."), s.id
                 )
             prev = previous_selection.get(name)
-            if prev:
+            if isinstance(prev, int) and prev > 0:
                 idx = combo.findData(prev)
                 if idx >= 0:
                     combo.setCurrentIndex(idx)
@@ -486,62 +803,8 @@ class PetCareApp(QMainWindow):
         ap_page = self._pages.get("appointments")
         if not ap_page:
             return
-        table: QTableWidget = ap_page.appointmentsTable
-        self._setup_appointments_table(table)
-        table.blockSignals(True)
-        table.setRowCount(len(self._demo_appointments))
-        for r, a in enumerate(self._demo_appointments):
-            table.setItem(r, 0, QTableWidgetItem(str(a["when"])))
-            table.setItem(r, 1, QTableWidgetItem(str(a["customer"])))
-            pets_list = a.get("pets")
-            if isinstance(pets_list, list) and pets_list:
-                pet_txt = ", ".join(str(x) for x in pets_list)
-            else:
-                pet_txt = str(a.get("pet", ""))
-            table.setItem(r, 2, QTableWidgetItem(pet_txt))
-            table.setItem(r, 3, QTableWidgetItem(str(a["service"])))
-
-            combo = QComboBox()
-            combo.addItems(APPOINTMENT_STATUSES)
-            st = str(a.get("status", "Chờ xử lý"))
-            idx = combo.findText(st)
-            combo.blockSignals(True)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
-            combo.blockSignals(False)
-            combo.currentTextChanged.connect(lambda text, row=r: self._on_appt_status_changed(row, text))
-            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-            table.setCellWidget(r, 4, combo)
-
-            res_item = QTableWidgetItem(str(a.get("result", "")))
-            res_item.setFlags(
-                res_item.flags()
-                | Qt.ItemFlag.ItemIsEditable
-                | Qt.ItemFlag.ItemIsEnabled
-                | Qt.ItemFlag.ItemIsSelectable
-            )
-            table.setItem(r, 5, res_item)
-
-        table.blockSignals(False)
-
-        hdr = table.horizontalHeader()
-        hdr.setStretchLastSection(False)
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        status_w = self._appointment_status_column_width_px(table)
-        table.setColumnWidth(4, status_w)
-        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
-        for r in range(table.rowCount()):
-            cw = table.cellWidget(r, 4)
-            if isinstance(cw, QComboBox):
-                view = cw.view()
-                if view is not None:
-                    view.setMinimumWidth(max(status_w, 260))
-
-        self._sync_appointment_detail_panel()
+        # backward compat: call DB renderer
+        self._render_appointments_table_db()
 
     def _format_appointment_detail_text(self, row: int) -> str:
         a = self._demo_appointments[row]
@@ -611,6 +874,528 @@ class PetCareApp(QMainWindow):
             self._demo_appointments[row]["result"] = item.text()
         self._sync_appointment_detail_if_current_row(row)
 
+    def _reload_appointments_table(self) -> None:
+        self._appointments_rows = appointment_service.list_recent(limit=150)  # type: ignore[attr-defined]
+        self._render_appointments_table_db()
+
+    def _render_appointments_table_db(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+        table: QTableWidget = ap_page.appointmentsTable
+        rows = getattr(self, "_appointments_rows", [])
+        table.blockSignals(True)
+        table.setRowCount(len(rows))
+        for r, a in enumerate(rows):
+            appt_id = int(a["appointment_id"])
+            when_txt = a["scheduled_at"].strftime("%d/%m/%Y %H:%M") if a.get("scheduled_at") else ""
+            table.setItem(r, 0, QTableWidgetItem(when_txt))
+            table.setItem(r, 1, QTableWidgetItem(str(a.get("customer_name", ""))))
+            table.setItem(r, 2, QTableWidgetItem(str(a.get("pet_name", ""))))
+            table.setItem(r, 3, QTableWidgetItem(str(a.get("service_name", ""))))
+            status_item = QTableWidgetItem(str(a.get("status_label") or ""))
+            status_item.setData(Qt.ItemDataRole.UserRole, appt_id)
+            table.setItem(r, 4, status_item)
+
+            res_item = QTableWidgetItem(str(a.get("note") or ""))
+            res_item.setData(Qt.ItemDataRole.UserRole, appt_id)
+            table.setItem(r, 5, res_item)
+
+        table.blockSignals(False)
+
+        hdr = table.horizontalHeader()
+        hdr.setStretchLastSection(False)
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+
+        # ensure table is read-only
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+    def _on_appointment_selection_changed_db(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+        row = ap_page.appointmentsTable.currentRow()
+        rows = getattr(self, "_appointments_rows", [])
+        if row < 0 or row >= len(rows):
+            ap_page.appointmentDetailEdit.clear()
+            return
+        a = rows[row]
+        lines = [
+            f"Thời gian: {a['scheduled_at'].strftime('%d/%m/%Y %H:%M') if a.get('scheduled_at') else ''}",
+            f"Khách hàng: {a.get('customer_name','')}",
+            f"SĐT: {a.get('customer_phone','—')}",
+            f"Địa chỉ: {a.get('customer_address','—')}",
+            f"Thú cưng: {a.get('pet_name','')}",
+            f"Dịch vụ: {a.get('service_name','')}",
+            f"Trạng thái: {a.get('status_label','')}",
+            "",
+            "Kết quả dịch vụ:",
+            str(a.get("note") or "(chưa có)"),
+        ]
+        ap_page.appointmentDetailEdit.setPlainText("\n".join(lines))
+
+    def _on_appointment_row_clicked(self, row: int, col: int) -> None:
+        try:
+            self._show_appointment_detail_dialog(row)
+        except Exception as exc:
+            QMessageBox.warning(self, "Chi tiết lịch hẹn", f"Không mở được chi tiết:\n{exc}")
+
+    def _show_appointment_detail_dialog(self, row: int) -> None:
+        from src.petcare_backend.dao import appointment_service_dao
+
+        rows = getattr(self, "_appointments_rows", [])
+        if row < 0 or row >= len(rows):
+            return
+        a = rows[row]
+        appt_id = int(a.get("appointment_id") or 0)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Chi tiết lịch hẹn #{a.get('appointment_id', '')}")
+        dlg.resize(680, 600)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        root = QVBoxLayout(dlg)
+        root.setSpacing(10)
+
+        header = QLabel("Thông tin lịch hẹn")
+        header.setStyleSheet("font: 900 11pt 'Segoe UI'; color:#0F172A;")
+        root.addWidget(header)
+
+        status_row = QHBoxLayout()
+        status_lbl = QLabel("Trạng thái")
+        status_lbl.setStyleSheet("color: rgba(15,23,42,0.65); font: 700 9pt 'Segoe UI';")
+        status_row.addWidget(status_lbl)
+        status_combo = QComboBox()
+        status_combo.addItems(APPOINTMENT_STATUSES)
+        current_status = str(a.get("status_label") or "Chờ xử lý")
+        idx = status_combo.findText(current_status)
+        if idx >= 0:
+            status_combo.setCurrentIndex(idx)
+        status_row.addWidget(status_combo, 1)
+        root.addLayout(status_row)
+
+        info_lines = [
+            f"Mã lịch hẹn: {a.get('appointment_id','')}",
+            f"Thời gian: {self._fmt_dt_safe(a.get('scheduled_at'))}",
+            f"Khách hàng: {a.get('customer_name','')}",
+            f"SĐT: {a.get('customer_phone','—')}",
+            f"Địa chỉ: {a.get('customer_address','—')}",
+        ]
+        info_text = QPlainTextEdit()
+        info_text.setReadOnly(True)
+        info_text.setPlainText("\n".join(info_lines))
+        info_text.setMaximumHeight(120)
+        root.addWidget(info_text)
+
+        svc_lbl = QLabel("Thú cưng & dịch vụ")
+        svc_lbl.setStyleSheet("font: 800 10pt 'Segoe UI'; color:#0F172A;")
+        root.addWidget(svc_lbl)
+
+        svc_table = QTableWidget()
+        svc_table.setColumnCount(4)
+        svc_table.setHorizontalHeaderLabels(["Thú cưng", "Dịch vụ", "SL", "Đơn giá"])
+        self._setup_table(svc_table)
+        try:
+            svc_items = appointment_service_dao.list_by_appointment(appt_id)
+        except Exception:
+            svc_items = []
+        svc_table.setRowCount(len(svc_items))
+        for r, it in enumerate(svc_items):
+            svc_table.setItem(r, 0, QTableWidgetItem(str(it.get("pet_name") or "—")))
+            svc_table.setItem(r, 1, QTableWidgetItem(str(it.get("service_name") or "")))
+            svc_table.setItem(r, 2, QTableWidgetItem(str(it.get("quantity") or 1)))
+            try:
+                price_txt = f"{int(float(it.get('unit_price') or 0)):,}đ".replace(",", ".")
+            except Exception:
+                price_txt = str(it.get("unit_price") or "")
+            svc_table.setItem(r, 3, QTableWidgetItem(price_txt))
+        hdr = svc_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        svc_table.setMinimumHeight(160)
+        root.addWidget(svc_table, 1)
+
+        result_lbl = QLabel("Kết quả dịch vụ")
+        result_lbl.setStyleSheet("font: 800 10pt 'Segoe UI'; color:#0F172A;")
+        root.addWidget(result_lbl)
+
+        result_edit = QPlainTextEdit()
+        result_edit.setPlaceholderText("Nhập kết quả dịch vụ...")
+        result_edit.setPlainText(str(a.get("note") or ""))
+        result_edit.setMaximumHeight(120)
+        root.addWidget(result_edit)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Close
+        )
+        save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
+        if save_btn is not None:
+            save_btn.setText("Lưu thay đổi")
+
+        def _on_save() -> None:
+            if appt_id <= 0:
+                QMessageBox.warning(dlg, "Lưu", "ID lịch hẹn không hợp lệ.")
+                return
+            try:
+                appointment_service.update_status(appt_id, status_combo.currentText())
+                appointment_service.update_result_note(appt_id, result_edit.toPlainText())
+            except Exception as exc:
+                QMessageBox.warning(dlg, "Lưu", str(exc))
+                return
+            self._reload_appointments_table()
+            dlg.accept()
+
+        buttons.accepted.connect(_on_save)
+        buttons.rejected.connect(dlg.reject)
+        root.addWidget(buttons)
+        dlg.exec()
+
+    @staticmethod
+    def _fmt_dt_safe(dt) -> str:
+        try:
+            return dt.strftime("%d/%m/%Y %H:%M")
+        except Exception:
+            return str(dt or "")
+
+    def _on_confirm_appointment_db(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+
+        cid = ap_page.customerCombo.currentData()
+        if not isinstance(cid, int) or not cid:
+            QMessageBox.warning(self, "Đặt lịch", "Vui lòng chọn khách hàng.")
+            return
+
+        scheduled_at = ap_page.timeEdit.dateTime().toPyDateTime()
+
+        # thu thap pet da check (giu nguyen thu tu theo widget)
+        checked_items: list[tuple[int, str]] = []
+        for i in range(ap_page.petListWidget.count()):
+            it = ap_page.petListWidget.item(i)
+            if it and it.checkState() == Qt.CheckState.Checked:
+                pid = it.data(Qt.ItemDataRole.UserRole)
+                if isinstance(pid, int):
+                    checked_items.append((pid, it.text()))
+
+        if not checked_items:
+            QMessageBox.warning(self, "Đặt lịch", "Vui lòng chọn ít nhất một thú cưng.")
+            return
+
+        # Xay dung plan (pet_id, service_id, qty=1) cho 1 appointment gop nhieu pet
+        plan: list[tuple[int, int, int]] = []
+        per_pet = len(checked_items) >= 2
+        if per_pet:
+            missing: list[str] = []
+            for pid, name in checked_items:
+                combo = self._per_pet_service_combos.get(name)
+                sid = combo.currentData() if combo else 0
+                if not isinstance(sid, int) or sid <= 0:
+                    missing.append(name)
+                else:
+                    plan.append((pid, sid, 1))
+            if missing:
+                QMessageBox.warning(
+                    self, "Đặt lịch", "Vui lòng chọn dịch vụ cho: " + ", ".join(missing)
+                )
+                return
+        else:
+            sid = ap_page.serviceCombo.currentData()
+            if not isinstance(sid, int) or sid <= 0:
+                QMessageBox.warning(self, "Đặt lịch", "Vui lòng chọn dịch vụ.")
+                return
+            plan.append((checked_items[0][0], sid, 1))
+
+        try:
+            appt_id = appointment_service.create_appointment_multi(
+                customer_id=cid,
+                scheduled_at=scheduled_at,
+                plan=plan,
+            )
+        except appointment_service.AppointmentError as exc:
+            QMessageBox.warning(self, "Đặt lịch", str(exc))
+            return
+        except Exception as exc:
+            QMessageBox.critical(self, "Đặt lịch", str(exc))
+            return
+
+        pet_names = ", ".join(n for _, n in checked_items)
+        QMessageBox.information(
+            self,
+            "Đặt lịch",
+            f"Đã tạo lịch hẹn #{appt_id} cho {len(checked_items)} thú cưng ({pet_names}).",
+        )
+        self._reload_appointments_table()
+        self._reset_appointment_form()
+
+    def _reset_appointment_form(self) -> None:
+        """Reset form dat lich ve trang thai ban dau sau khi tao thanh cong."""
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+
+        ap_page.customerCombo.blockSignals(True)
+        if ap_page.customerCombo.count() > 0:
+            ap_page.customerCombo.setCurrentIndex(0)
+        ap_page.customerCombo.blockSignals(False)
+
+        ap_page.petListWidget.blockSignals(True)
+        ap_page.petListWidget.clear()
+        ap_page.petListWidget.blockSignals(False)
+
+        if ap_page.serviceCombo.count() > 0:
+            ap_page.serviceCombo.setCurrentIndex(0)
+
+        for combo in list(self._per_pet_service_combos.values()):
+            if combo.count() > 0:
+                combo.setCurrentIndex(0)
+        self._update_per_pet_service_ui()
+
+        ap_page.timeEdit.setDateTime(QDateTime.currentDateTime().addSecs(3600))
+
+    def _on_quick_add_customer_for_appointment(self) -> None:
+        """Mo dialog them khach hang moi (kem nhieu thu cung) ngay tu trang dat lich.
+
+        Sau khi tao xong, tu dong refresh combo khach hang va select khach moi.
+        """
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Thêm khách hàng mới")
+        dlg.setMinimumWidth(640)
+        dlg.resize(680, 600)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(12)
+
+        title = QLabel("Nhập thông tin khách hàng")
+        title.setStyleSheet("font: 800 12pt 'Segoe UI'; color: #0F172A;")
+        layout.addWidget(title)
+
+        cust_form = QFormLayout()
+        cust_form.setSpacing(10)
+        name_edit = QLineEdit()
+        phone_edit = QLineEdit()
+        address_edit = QLineEdit()
+        email_edit = QLineEdit()
+        name_edit.setPlaceholderText("VD: Nguyễn Văn A")
+        phone_edit.setPlaceholderText("VD: 0901234567")
+        address_edit.setPlaceholderText("Địa chỉ (tuỳ chọn)")
+        email_edit.setPlaceholderText("Email (tuỳ chọn)")
+        cust_form.addRow("Tên khách hàng *", name_edit)
+        cust_form.addRow("Số điện thoại *", phone_edit)
+        cust_form.addRow("Địa chỉ", address_edit)
+        cust_form.addRow("Email", email_edit)
+        layout.addLayout(cust_form)
+
+        pet_title = QLabel("Thú cưng (tuỳ chọn — có thể thêm nhiều con)")
+        pet_title.setStyleSheet("font: 800 10pt 'Segoe UI'; color:#0F172A; margin-top:6px;")
+        layout.addWidget(pet_title)
+
+        # --- Form nhap 1 thu cung ---
+        pet_row = QHBoxLayout()
+        pet_row.setSpacing(8)
+        pet_name = QLineEdit()
+        pet_name.setPlaceholderText("Tên *")
+        pet_species = QLineEdit()
+        pet_species.setPlaceholderText("Loài * (VD: Chó, Mèo)")
+        pet_breed = QLineEdit()
+        pet_breed.setPlaceholderText("Giống")
+        pet_age = QSpinBox()
+        pet_age.setRange(0, 50)
+        pet_age.setSuffix(" tuổi")
+        pet_row.addWidget(pet_name, 2)
+        pet_row.addWidget(pet_species, 2)
+        pet_row.addWidget(pet_breed, 2)
+        pet_row.addWidget(pet_age, 1)
+
+        add_pet_btn = QPushButton("＋ Thêm vào danh sách")
+        add_pet_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_pet_btn.setStyleSheet(
+            "QPushButton{background:#DCFCE7;color:#166534;border:none;padding:6px 12px;border-radius:8px;font:700 9pt 'Segoe UI';}"
+            "QPushButton:hover{background:#BBF7D0;}"
+        )
+        pet_row.addWidget(add_pet_btn)
+        layout.addLayout(pet_row)
+
+        # --- Bang danh sach pet se tao ---
+        pets_table = QTableWidget()
+        pets_table.setColumnCount(5)
+        pets_table.setHorizontalHeaderLabels(["Tên", "Loài", "Giống", "Tuổi", ""])
+        self._setup_table(pets_table)
+        pets_table.setMinimumHeight(160)
+        pets_table.horizontalHeader().setStretchLastSection(False)
+        pets_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        pets_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        pets_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        pets_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        pets_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(pets_table, 1)
+
+        pending_pets: list[dict] = []
+
+        def _refresh_pets_table() -> None:
+            pets_table.setRowCount(len(pending_pets))
+            for r, p in enumerate(pending_pets):
+                pets_table.setItem(r, 0, QTableWidgetItem(p["name"]))
+                pets_table.setItem(r, 1, QTableWidgetItem(p["species"]))
+                pets_table.setItem(r, 2, QTableWidgetItem(p["breed"] or ""))
+                pets_table.setItem(r, 3, QTableWidgetItem(str(p["age"])))
+                btn_del = QPushButton("Xoá")
+                btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn_del.setStyleSheet(
+                    "QPushButton{background:#FEE2E2;color:#B91C1C;border:none;padding:3px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
+                    "QPushButton:hover{background:#FCA5A5;color:#7F1D1D;}"
+                )
+                btn_del.clicked.connect(lambda _=False, idx=r: _remove_pending_pet(idx))
+                pets_table.setCellWidget(r, 4, btn_del)
+
+        def _remove_pending_pet(idx: int) -> None:
+            if 0 <= idx < len(pending_pets):
+                pending_pets.pop(idx)
+                _refresh_pets_table()
+
+        def _on_add_pet_to_list() -> None:
+            nm = pet_name.text().strip()
+            sp = pet_species.text().strip()
+            if not nm or not sp:
+                QMessageBox.warning(dlg, "Thêm thú cưng", "Vui lòng nhập Tên và Loài.")
+                return
+            pending_pets.append(
+                {
+                    "name": nm,
+                    "species": sp,
+                    "breed": pet_breed.text().strip() or None,
+                    "age": int(pet_age.value()),
+                }
+            )
+            _refresh_pets_table()
+            pet_name.clear()
+            pet_species.clear()
+            pet_breed.clear()
+            pet_age.setValue(0)
+            pet_name.setFocus()
+
+        add_pet_btn.clicked.connect(_on_add_pet_to_list)
+
+        hint = QLabel(
+            "Lưu ý: điền thông tin 1 thú cưng rồi bấm “＋ Thêm vào danh sách”. "
+            "Sau khi bấm “Thêm” ở dưới, khách hàng và tất cả thú cưng trong danh sách sẽ được tạo."
+        )
+        hint.setStyleSheet("color:#64748B; font:600 8.5pt 'Segoe UI';")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Thêm")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        created = {"customer_id": None, "pet_count": 0}
+
+        def _on_ok() -> None:
+            # Neu con du lieu trong o nhap thu cung thi tu dong day vao list truoc khi luu
+            if pet_name.text().strip() or pet_species.text().strip():
+                nm = pet_name.text().strip()
+                sp = pet_species.text().strip()
+                if not nm or not sp:
+                    QMessageBox.warning(
+                        dlg,
+                        "Thêm thú cưng",
+                        "Ô nhập thú cưng còn thiếu Tên hoặc Loài. Hãy bấm “＋ Thêm vào danh sách” hoặc xoá các ô đó.",
+                    )
+                    return
+                pending_pets.append(
+                    {
+                        "name": nm,
+                        "species": sp,
+                        "breed": pet_breed.text().strip() or None,
+                        "age": int(pet_age.value()),
+                    }
+                )
+
+            try:
+                cust_id = customer_service.create_customer(
+                    name_edit.text(),
+                    phone_edit.text(),
+                    address_edit.text(),
+                    email_edit.text(),
+                )
+            except customer_service.CustomerError as exc:
+                QMessageBox.warning(dlg, "Thêm khách hàng", str(exc))
+                return
+            except Exception as exc:
+                QMessageBox.critical(dlg, "Thêm khách hàng", str(exc))
+                return
+
+            created_pets = 0
+            failed: list[str] = []
+            for p in pending_pets:
+                try:
+                    pet_service.create_pet(
+                        int(cust_id),
+                        p["name"],
+                        p["species"],
+                        p["breed"],
+                        int(p["age"]),
+                    )
+                    created_pets += 1
+                except pet_service.PetError as exc:
+                    failed.append(f"{p['name']}: {exc}")
+                except Exception as exc:
+                    failed.append(f"{p['name']}: {exc}")
+
+            created["customer_id"] = int(cust_id)
+            created["pet_count"] = created_pets
+
+            if failed:
+                QMessageBox.warning(
+                    dlg,
+                    "Thêm thú cưng",
+                    "Đã tạo khách hàng và "
+                    f"{created_pets}/{len(pending_pets)} thú cưng.\nLỗi:\n- "
+                    + "\n- ".join(failed),
+                )
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        new_cid = created.get("customer_id")
+        if not isinstance(new_cid, int):
+            return
+
+        self._reload_customers(None)
+        self._reload_pets()
+
+        ap_page = self._pages.get("appointments")
+        if ap_page is not None:
+            combo = ap_page.customerCombo
+            idx = combo.findData(new_cid)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+
+        QMessageBox.information(
+            self,
+            "Thêm khách hàng",
+            f"Đã thêm khách hàng mới (ID: {new_cid}) kèm {created.get('pet_count', 0)} thú cưng.",
+        )
+
     # ===================== GROUP B: CATALOG (Customer/Pet/Service) =====================
 
     def _reload_customers(self, query: str | None) -> None:
@@ -623,6 +1408,18 @@ class PetCareApp(QMainWindow):
     def _reload_services(self) -> None:
         self._services_list = list(service_service.list_services(active_only=True))
         self._render_services_table()
+        self._refresh_appointment_services_combo()
+
+    def _refresh_appointment_services_combo(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+        ap_page.serviceCombo.blockSignals(True)
+        ap_page.serviceCombo.clear()
+        ap_page.serviceCombo.addItem("Chọn dịch vụ", 0)
+        for s in self._services_list:
+            ap_page.serviceCombo.addItem(f"{s.name} ({int(s.price):,}đ)".replace(",", "."), s.id)
+        ap_page.serviceCombo.blockSignals(False)
 
     def _reload_pets(self) -> None:
         pets_page = self._pages.get("pets")
@@ -1165,99 +1962,8 @@ class PetCareApp(QMainWindow):
         dlg.exec()
 
     def _on_demo_confirm_appointment(self) -> None:
-        ap_page = self._pages.get("appointments")
-        if not ap_page:
-            return
-
-        customer_id = ap_page.customerCombo.currentData()
-        when = ap_page.timeEdit.dateTime().toString("dd/MM/yyyy HH:mm")
-
-        customer_text = ap_page.customerCombo.currentText()
-        if customer_id and "(" in customer_text:
-            customer_text = customer_text.split("(")[0].strip()
-
-        if not customer_id:
-            QMessageBox.warning(self, "Đặt lịch", "Vui lòng chọn khách hàng.")
-            return
-
-        pets_selected: list[str] = []
-        for i in range(ap_page.petListWidget.count()):
-            it = ap_page.petListWidget.item(i)
-            if it and it.checkState() == Qt.CheckState.Checked:
-                pets_selected.append(it.text())
-
-        if not pets_selected:
-            QMessageBox.warning(
-                self,
-                "Đặt lịch",
-                "Vui lòng chọn ít nhất một thú cưng (tích vào danh sách sau khi chọn khách hàng).",
-            )
-            return
-
-        per_pet_mode = len(pets_selected) >= 2
-
-        if per_pet_mode:
-            plan: list[tuple[str, str]] = []
-            missing: list[str] = []
-            for name in pets_selected:
-                combo = self._per_pet_service_combos.get(name)
-                svc = combo.currentData() if combo else ""
-                if not svc:
-                    missing.append(name)
-                else:
-                    plan.append((name, svc))
-            if missing:
-                QMessageBox.warning(
-                    self,
-                    "Đặt lịch",
-                    "Vui lòng chọn dịch vụ cho: " + ", ".join(missing) + ".",
-                )
-                return
-            for name, svc in plan:
-                self._demo_appointments.append(
-                    {
-                        "customer_id": customer_id or "",
-                        "customer": customer_text,
-                        "pet": name,
-                        "pets": [name],
-                        "service": svc,
-                        "when": when,
-                        "status": "Chờ xử lý",
-                        "result": "",
-                    }
-                )
-            added = len(plan)
-        else:
-            service_name = ap_page.serviceCombo.currentData()
-            if not service_name:
-                QMessageBox.warning(self, "Đặt lịch", "Vui lòng chọn dịch vụ.")
-                return
-            pet_display = ", ".join(pets_selected)
-            self._demo_appointments.append(
-                {
-                    "customer_id": customer_id or "",
-                    "customer": customer_text,
-                    "pet": pet_display,
-                    "pets": pets_selected,
-                    "service": service_name,
-                    "when": when,
-                    "status": "Chờ xử lý",
-                    "result": "",
-                }
-            )
-            added = 1
-
-        self._render_appointments_table()
-        ap_page.petListWidget.blockSignals(True)
-        for i in range(ap_page.petListWidget.count()):
-            it = ap_page.petListWidget.item(i)
-            if it:
-                it.setCheckState(Qt.CheckState.Unchecked)
-        ap_page.petListWidget.blockSignals(False)
-        self._update_per_pet_service_ui()
-        if ap_page.appointmentsTable.rowCount() > 0:
-            last_row = ap_page.appointmentsTable.rowCount() - 1
-            ap_page.appointmentsTable.selectRow(max(0, last_row - added + 1))
+        # Backward compat: demo handler removed, use DB handler.
+        self._on_confirm_appointment_db()
 
     def _on_login(self) -> None:
         username = (self._login.usernameEdit.text() or "").strip()
@@ -1338,6 +2044,13 @@ class PetCareApp(QMainWindow):
             if hasattr(ap_page, "serviceCombo"):
                 ap_page.serviceCombo.clear()
                 ap_page.serviceCombo.addItem("Chọn dịch vụ", "")
+
+        inv_page = self._pages.get("invoices")
+        if inv_page:
+            if hasattr(inv_page, "invoicesTable"):
+                inv_page.invoicesTable.setRowCount(0)
+            if hasattr(inv_page, "emptyLabel"):
+                inv_page.emptyLabel.setText("Chưa có hóa đơn nào")
 
     def _refresh_user_indicator(self, user) -> None:
         if user is None:

@@ -98,7 +98,7 @@ CREATE TABLE service (
 CREATE TABLE appointment (
     id              INT             AUTO_INCREMENT PRIMARY KEY,
     customer_id     INT             NOT NULL,
-    pet_id          INT             NOT NULL,
+    pet_id          INT             NULL COMMENT 'Neu 1 appointment nhieu pet, de NULL va dung appointment_service.pet_id',
     employee_id     INT             NULL COMMENT 'Nhan vien phu trach',
     scheduled_at    DATETIME        NOT NULL,
     status          ENUM('CHO_XU_LY','DANG_THUC_HIEN','HOAN_THANH','HUY')
@@ -112,7 +112,7 @@ CREATE TABLE appointment (
         ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_app_pet
         FOREIGN KEY (pet_id) REFERENCES pet(id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
+        ON UPDATE CASCADE ON DELETE SET NULL,
     CONSTRAINT fk_app_employee
         FOREIGN KEY (employee_id) REFERENCES user(id)
         ON UPDATE CASCADE ON DELETE SET NULL,
@@ -127,17 +127,24 @@ CREATE TABLE appointment (
 -- 7. appointment_service (bang trung gian - dich vu trong lich hen)
 -- ---------------------------------------------------------------------
 CREATE TABLE appointment_service (
+    id              INT             AUTO_INCREMENT PRIMARY KEY,
     appointment_id  INT             NOT NULL,
     service_id      INT             NOT NULL,
+    pet_id          INT             NULL COMMENT 'Dich vu cho pet nao (neu lich hen 1 pet thi co the bo trong)',
     quantity        INT             NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_price      DECIMAL(12,2)   NOT NULL CHECK (unit_price >= 0),
-    PRIMARY KEY (appointment_id, service_id),
     CONSTRAINT fk_apps_appointment
         FOREIGN KEY (appointment_id) REFERENCES appointment(id)
         ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT fk_apps_service
         FOREIGN KEY (service_id) REFERENCES service(id)
-        ON UPDATE CASCADE ON DELETE RESTRICT
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_apps_pet
+        FOREIGN KEY (pet_id) REFERENCES pet(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    INDEX idx_apps_appointment (appointment_id),
+    INDEX idx_apps_service (service_id),
+    INDEX idx_apps_pet (pet_id)
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
@@ -176,6 +183,7 @@ CREATE TABLE invoice_item (
     id              INT             AUTO_INCREMENT PRIMARY KEY,
     invoice_id      INT             NOT NULL,
     service_id      INT             NOT NULL,
+    pet_id          INT             NULL COMMENT 'Dich vu cho pet nao (copy tu appointment_service)',
     quantity        INT             NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_price      DECIMAL(12,2)   NOT NULL CHECK (unit_price >= 0),
     line_total      DECIMAL(14,2)   GENERATED ALWAYS AS (quantity * unit_price) STORED,
@@ -185,8 +193,12 @@ CREATE TABLE invoice_item (
     CONSTRAINT fk_item_service
         FOREIGN KEY (service_id) REFERENCES service(id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_item_pet
+        FOREIGN KEY (pet_id) REFERENCES pet(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
     INDEX idx_item_invoice (invoice_id),
-    INDEX idx_item_service (service_id)
+    INDEX idx_item_service (service_id),
+    INDEX idx_item_pet (pet_id)
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
