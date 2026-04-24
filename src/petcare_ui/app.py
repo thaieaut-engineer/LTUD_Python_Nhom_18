@@ -33,6 +33,8 @@ from PyQt6.QtWidgets import (
 
 from .theme import background_image_path, qss
 from .demo_data import Customer, Pet, seed_demo
+from src.petcare_backend.services import auth_service
+from src.petcare_backend.session import Session
 
 
 APPOINTMENT_STATUSES = ("Chờ xử lý", "Đang thực hiện", "Hoàn thành")
@@ -126,6 +128,7 @@ class PetCareApp(QMainWindow):
         self.setCentralWidget(self._login)
         self._wire_login()
         self._wire_main()
+        self._install_menubar()
 
         self._install_backgrounds()
 
@@ -162,6 +165,23 @@ class PetCareApp(QMainWindow):
         self._login.LoginButton.clicked.connect(self._on_login)
         self._login.usernameEdit.returnPressed.connect(self._on_login)
         self._login.passwordEdit.returnPressed.connect(self._on_login)
+
+    def _install_menubar(self) -> None:
+        from PyQt6.QtGui import QAction
+
+        menubar = self.menuBar()
+        menubar.clear()
+        account_menu = menubar.addMenu("Tài khoản")
+
+        change_pw = QAction("Đổi mật khẩu...", self)
+        change_pw.triggered.connect(self._show_change_password_dialog)
+        account_menu.addAction(change_pw)
+
+        account_menu.addSeparator()
+
+        logout_action = QAction("Đăng xuất", self)
+        logout_action.triggered.connect(self._on_logout)
+        account_menu.addAction(logout_action)
 
     def _wire_main(self) -> None:
         self._main.navDashboard.clicked.connect(lambda: self._set_active("dashboard"))
@@ -1183,11 +1203,119 @@ class PetCareApp(QMainWindow):
             ap_page.appointmentsTable.selectRow(max(0, last_row - added + 1))
 
     def _on_login(self) -> None:
+        username = (self._login.usernameEdit.text() or "").strip()
+        password = self._login.passwordEdit.text() or ""
+        try:
+            user = auth_service.login(username, password)
+        except auth_service.AuthError as exc:
+            QMessageBox.warning(self, "Đăng nhập thất bại", str(exc))
+            self._login.passwordEdit.clear()
+            self._login.passwordEdit.setFocus()
+            return
+        except Exception as exc:  # ket noi DB / loi he thong
+            QMessageBox.critical(
+                self,
+                "Lỗi hệ thống",
+                f"Không thể kết nối hệ thống:\n{exc}\n\n"
+                "Hãy kiểm tra MySQL đang chạy và file .env đã đúng.",
+            )
+            return
+
         self.setCentralWidget(self._main)
+        self._refresh_user_indicator(user)
+        self._apply_role_visibility(user)
         self._set_active("dashboard")
 
     def _on_logout(self) -> None:
+        auth_service.logout()
+        self._login.passwordEdit.clear()
+        self._login.usernameEdit.setFocus()
         self.setCentralWidget(self._login)
+        self._refresh_user_indicator(None)
+
+    def _refresh_user_indicator(self, user) -> None:
+        if user is None:
+            self.setWindowTitle("Pet Care Management")
+            return
+        self.setWindowTitle(
+            f"Pet Care Management - {user.full_name} ({user.role_name})"
+        )
+
+    def _apply_role_visibility(self, user) -> None:
+        # Tam thoi chua co nut nao chi rieng ADMIN. Khi them quan ly user (B1)
+        # se an/hien o day. Vi du:
+        # is_admin = user.is_admin
+        # if hasattr(self._main, "navUsers"):
+        #     self._main.navUsers.setVisible(is_admin)
+        return
+
+    def _show_change_password_dialog(self) -> None:
+        user = Session.current()
+        if user is None:
+            QMessageBox.warning(self, "Đổi mật khẩu", "Bạn cần đăng nhập trước.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Đổi mật khẩu")
+        dlg.setMinimumWidth(420)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(12)
+
+        title = QLabel(f"Tài khoản: {user.username} ({user.full_name})")
+        title.setStyleSheet("font: 700 10pt 'Segoe UI'; color: #0F172A;")
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+        old_edit = QLineEdit()
+        old_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        new_edit = QLineEdit()
+        new_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        confirm_edit = QLineEdit()
+        confirm_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("Mật khẩu hiện tại *", old_edit)
+        form.addRow("Mật khẩu mới *", new_edit)
+        form.addRow("Xác nhận mật khẩu *", confirm_edit)
+        layout.addLayout(form)
+
+        hint = QLabel("Mật khẩu mới phải có ít nhất 6 ký tự và khác mật khẩu hiện tại.")
+        hint.setStyleSheet("color: #64748B; font: 600 9pt 'Segoe UI';")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn is not None:
+            ok_btn.setText("Đổi mật khẩu")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn is not None:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                auth_service.change_password(
+                    user.id,
+                    old_edit.text(),
+                    new_edit.text(),
+                    confirm_edit.text(),
+                )
+            except auth_service.AuthError as exc:
+                QMessageBox.warning(dlg, "Đổi mật khẩu", str(exc))
+                return
+            except Exception as exc:
+                QMessageBox.critical(dlg, "Lỗi hệ thống", str(exc))
+                return
+            QMessageBox.information(dlg, "Đổi mật khẩu", "Đổi mật khẩu thành công.")
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        dlg.exec()
 
     def _set_active(self, key: str) -> None:
         self._set_sidebar_active(key)
