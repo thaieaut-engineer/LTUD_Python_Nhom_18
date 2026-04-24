@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -35,6 +36,7 @@ from .theme import background_image_path, qss
 from .pages.dashboard import DashboardView
 from src.petcare_backend.services import auth_service
 from src.petcare_backend.services import customer_service, pet_service, service_service
+from src.petcare_backend.services import user_service
 from src.petcare_backend.models import Customer, Pet, Service
 from src.petcare_backend.session import Session
 
@@ -127,7 +129,13 @@ class PetCareApp(QMainWindow):
 
         self._bg_path: str = background_image_path()
 
-        self.setCentralWidget(self._login)
+        # IMPORTANT: QMainWindow.setCentralWidget will delete the previous widget.
+        # Use a stacked root to switch between login/main safely.
+        self._root_stack = QStackedWidget()
+        self._root_stack.addWidget(self._login)
+        self._root_stack.addWidget(self._main)
+        self.setCentralWidget(self._root_stack)
+        self._root_stack.setCurrentWidget(self._login)
         self._wire_login()
         self._wire_main()
         self._install_menubar()
@@ -168,6 +176,47 @@ class PetCareApp(QMainWindow):
         self._login.LoginButton.clicked.connect(self._on_login)
         self._login.usernameEdit.returnPressed.connect(self._on_login)
         self._login.passwordEdit.returnPressed.connect(self._on_login)
+        self._install_register_button()
+
+    def _install_register_button(self) -> None:
+        """Login UI chua co nut Dang ky -> chen runtime."""
+        if hasattr(self._login, "registerButton"):
+            return
+        card = self._login.findChild(QWidget, "LoginCard")
+        if card is None:
+            return
+        layout = card.layout()
+        if layout is None:
+            return
+
+        btn = QPushButton("Tạo tài khoản (Nhân viên)")
+        btn.setObjectName("GhostButton")
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(
+            "QPushButton{background:rgba(255,255,255,0.10);color:rgba(255,255,255,0.85);"
+            "border:1px solid rgba(255,255,255,0.22);padding:9px 12px;border-radius:12px;"
+            "font:700 10pt 'Segoe UI';}"
+            "QPushButton:hover{background:rgba(255,255,255,0.16);border:1px solid rgba(191,219,254,0.65);}"
+        )
+        btn.clicked.connect(self._show_register_dialog)
+
+        # insert under LoginButton (best effort)
+        inserted = False
+        for i in range(layout.count()):
+            w = layout.itemAt(i).widget()
+            if w is not None and w.objectName() == "LoginButton":
+                layout.insertWidget(i + 1, btn)
+                inserted = True
+                break
+        if not inserted:
+            layout.addWidget(btn)
+
+        # update hint
+        hint = self._login.findChild(QLabel, "Hint")
+        if hint is not None:
+            hint.setText("Dùng tài khoản được cấp hoặc tạo tài khoản nhân viên để đăng nhập.")
+
+        self._login.registerButton = btn  # type: ignore[attr-defined]
 
     def _install_menubar(self) -> None:
         from PyQt6.QtGui import QAction
@@ -179,6 +228,18 @@ class PetCareApp(QMainWindow):
         change_pw = QAction("Đổi mật khẩu...", self)
         change_pw.triggered.connect(self._show_change_password_dialog)
         account_menu.addAction(change_pw)
+
+        # Admin menu (will be hidden for non-admin)
+        admin_menu = menubar.addMenu("Quản trị")
+        manage_users = QAction("Quản lý người dùng...", self)
+        manage_users.triggered.connect(self._show_user_admin_dialog)
+        admin_menu.addAction(manage_users)
+
+        self._admin_menu = admin_menu
+        self._action_manage_users = manage_users
+        # mac dinh an cho den khi dang nhap admin
+        admin_menu.menuAction().setVisible(False)
+        manage_users.setVisible(False)
 
         account_menu.addSeparator()
 
@@ -733,6 +794,15 @@ class PetCareApp(QMainWindow):
         on_delete,
         delete_text: str = "Xóa",
     ) -> QWidget:
+        if not getattr(self, "_is_admin", False):
+            w = QWidget()
+            lay = QHBoxLayout(w)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lbl = QLabel("—")
+            lbl.setStyleSheet("color:#94A3B8; font:700 9pt 'Segoe UI';")
+            lay.addWidget(lbl, 0, Qt.AlignmentFlag.AlignCenter)
+            return w
+
         w = QWidget()
         lay = QHBoxLayout(w)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -1208,7 +1278,7 @@ class PetCareApp(QMainWindow):
             )
             return
 
-        self.setCentralWidget(self._main)
+        self._root_stack.setCurrentWidget(self._main)
         self._refresh_user_indicator(user)
         self._apply_role_visibility(user)
         try:
@@ -1225,8 +1295,49 @@ class PetCareApp(QMainWindow):
         auth_service.logout()
         self._login.passwordEdit.clear()
         self._login.usernameEdit.setFocus()
-        self.setCentralWidget(self._login)
+        self._root_stack.setCurrentWidget(self._login)
         self._refresh_user_indicator(None)
+        self._clear_catalog_ui()
+        # an menu admin sau khi logout
+        if hasattr(self, "_admin_menu") and self._admin_menu is not None:
+            self._admin_menu.menuAction().setVisible(False)
+
+    def _clear_catalog_ui(self) -> None:
+        """Clear du lieu danh muc khi logout."""
+        self._customers = []
+        self._pets = []
+        self._services_list = []
+
+        customers_page = self._pages.get("customers")
+        if customers_page and hasattr(customers_page, "customersTable"):
+            customers_page.customersTable.setRowCount(0)
+
+        pets_page = self._pages.get("pets")
+        if pets_page:
+            if hasattr(pets_page, "petsTable"):
+                pets_page.petsTable.setRowCount(0)
+            if hasattr(pets_page, "customerFilterCombo"):
+                pets_page.customerFilterCombo.blockSignals(True)
+                pets_page.customerFilterCombo.clear()
+                pets_page.customerFilterCombo.addItem("Tất cả khách hàng", "ALL")
+                pets_page.customerFilterCombo.blockSignals(False)
+
+        services_page = self._pages.get("services")
+        if services_page and hasattr(services_page, "servicesTable"):
+            services_page.servicesTable.setRowCount(0)
+
+        ap_page = self._pages.get("appointments")
+        if ap_page:
+            if hasattr(ap_page, "customerCombo"):
+                ap_page.customerCombo.blockSignals(True)
+                ap_page.customerCombo.clear()
+                ap_page.customerCombo.addItem("Chọn khách hàng", "")
+                ap_page.customerCombo.blockSignals(False)
+            if hasattr(ap_page, "petListWidget"):
+                ap_page.petListWidget.clear()
+            if hasattr(ap_page, "serviceCombo"):
+                ap_page.serviceCombo.clear()
+                ap_page.serviceCombo.addItem("Chọn dịch vụ", "")
 
     def _refresh_user_indicator(self, user) -> None:
         if user is None:
@@ -1237,12 +1348,315 @@ class PetCareApp(QMainWindow):
         )
 
     def _apply_role_visibility(self, user) -> None:
-        # Tam thoi chua co nut nao chi rieng ADMIN. Khi them quan ly user (B1)
-        # se an/hien o day. Vi du:
-        # is_admin = user.is_admin
-        # if hasattr(self._main, "navUsers"):
-        #     self._main.navUsers.setVisible(is_admin)
-        return
+        is_admin = bool(getattr(user, "is_admin", False))
+        if hasattr(self, "_admin_menu") and self._admin_menu is not None:
+            self._admin_menu.menuAction().setVisible(is_admin)
+        if hasattr(self, "_action_manage_users") and self._action_manage_users is not None:
+            self._action_manage_users.setVisible(is_admin)
+
+        # Catalog CRUD: chi Admin moi duoc them/sua/xoa
+        customers_page = self._pages.get("customers")
+        if customers_page and hasattr(customers_page, "addCustomerButton"):
+            customers_page.addCustomerButton.setVisible(is_admin)
+
+        pets_page = self._pages.get("pets")
+        if pets_page and hasattr(pets_page, "addPetButton"):
+            pets_page.addPetButton.setVisible(is_admin)
+
+        services_page = self._pages.get("services")
+        if services_page and hasattr(services_page, "addServiceButton"):
+            services_page.addServiceButton.setVisible(is_admin)
+
+        # Luu flag de render action column
+        self._is_admin = is_admin
+
+    def _show_user_admin_dialog(self) -> None:
+        if not Session.is_admin():
+            QMessageBox.warning(self, "Quản lý người dùng", "Chỉ Admin mới được sử dụng chức năng này.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Quản lý người dùng")
+        dlg.resize(860, 520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        root = QVBoxLayout(dlg)
+        root.setSpacing(10)
+
+        header = QHBoxLayout()
+        title = QLabel("Danh sách người dùng")
+        title.setStyleSheet("font: 900 12pt 'Segoe UI'; color: #0F172A;")
+        header.addWidget(title)
+        header.addStretch(1)
+
+        btn_add = QPushButton("＋  Thêm user")
+        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_add.setObjectName("PrimaryButton")
+        btn_add.clicked.connect(lambda: self._admin_add_user(dlg))
+        header.addWidget(btn_add)
+
+        root.addLayout(header)
+
+        table = QTableWidget()
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(
+            ["ID", "Username", "Họ tên", "Role", "SĐT", "Trạng thái", "Thao tác"]
+        )
+        self._setup_table(table)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        root.addWidget(table, 1)
+
+        def refresh() -> None:
+            rows = user_service.list_users(active_only=False)
+            table.setRowCount(len(rows))
+            for r, u in enumerate(rows):
+                table.setItem(r, 0, QTableWidgetItem(str(u["id"])))
+                table.setItem(r, 1, QTableWidgetItem(u["username"]))
+                table.setItem(r, 2, QTableWidgetItem(u["full_name"]))
+                table.setItem(r, 3, QTableWidgetItem(u["role_name"]))
+                table.setItem(r, 4, QTableWidgetItem(u.get("phone") or ""))
+                table.setItem(r, 5, QTableWidgetItem("Đang hoạt động" if u["is_active"] else "Bị khoá"))
+
+                uid = int(u["id"])
+                is_active = bool(u["is_active"])
+                table.setCellWidget(
+                    r,
+                    6,
+                    self._make_admin_actions(
+                        uid=uid,
+                        is_active=is_active,
+                        on_refresh=refresh,
+                        parent=dlg,
+                    ),
+                )
+
+            hdr = table.horizontalHeader()
+            hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+            hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+            hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+            hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+
+        refresh()
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dlg.reject)
+        buttons.accepted.connect(dlg.accept)
+        root.addWidget(buttons)
+        dlg.exec()
+
+    def _make_admin_actions(self, *, uid: int, is_active: bool, on_refresh, parent: QWidget) -> QWidget:
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(6)
+
+        def _btn(text: str, bg: str, fg: str):
+            b = QPushButton(text)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(
+                f"QPushButton{{background:{bg};color:{fg};border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}}"
+                f"QPushButton:hover{{opacity:0.9;}}"
+            )
+            return b
+
+        btn_edit = _btn("Sửa", "#EEF2FF", "#3730A3")
+        btn_role = _btn("Role", "#E0F2FE", "#075985")
+        btn_pw = _btn("Reset PW", "#FEF9C3", "#854D0E")
+        btn_lock = _btn("Mở" if not is_active else "Khoá", "#FEE2E2", "#B91C1C")
+
+        btn_edit.clicked.connect(lambda: self._admin_edit_user(parent, uid, on_refresh))
+        btn_role.clicked.connect(lambda: self._admin_change_role(parent, uid, on_refresh))
+        btn_pw.clicked.connect(lambda: self._admin_reset_password(parent, uid, on_refresh))
+        btn_lock.clicked.connect(lambda: self._admin_toggle_active(parent, uid, is_active, on_refresh))
+
+        lay.addWidget(btn_edit)
+        lay.addWidget(btn_role)
+        lay.addWidget(btn_pw)
+        lay.addWidget(btn_lock)
+        return w
+
+    def _admin_add_user(self, parent: QWidget) -> None:
+        dlg = QDialog(parent)
+        dlg.setWindowTitle("Thêm user")
+        dlg.setMinimumWidth(520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        role_combo = QComboBox()
+        role_combo.addItem("ADMIN", "ADMIN")
+        role_combo.addItem("EMPLOYEE", "EMPLOYEE")
+        username = QLineEdit()
+        full_name = QLineEdit()
+        phone = QLineEdit()
+        pw = QLineEdit()
+        pw.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("Role *", role_combo)
+        form.addRow("Username *", username)
+        form.addRow("Họ tên *", full_name)
+        form.addRow("SĐT", phone)
+        form.addRow("Mật khẩu *", pw)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Thêm")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                user_service.admin_create_user(
+                    role_name=str(role_combo.currentData()),
+                    username=username.text(),
+                    password=pw.text(),
+                    full_name=full_name.text(),
+                    phone=phone.text(),
+                )
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Thêm user", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        dlg.exec()
+
+    def _admin_edit_user(self, parent: QWidget, uid: int, on_refresh) -> None:
+        users = user_service.list_users(active_only=False)
+        u = next((x for x in users if int(x["id"]) == uid), None)
+        if u is None:
+            return
+
+        dlg = QDialog(parent)
+        dlg.setWindowTitle(f"Sửa user #{uid}")
+        dlg.setMinimumWidth(520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        full_name = QLineEdit(u["full_name"])
+        phone = QLineEdit(u.get("phone") or "")
+        form.addRow("Họ tên *", full_name)
+        form.addRow("SĐT", phone)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Lưu")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                user_service.admin_update_user(uid, full_name.text(), phone.text())
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Sửa user", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            on_refresh()
+
+    def _admin_change_role(self, parent: QWidget, uid: int, on_refresh) -> None:
+        dlg = QDialog(parent)
+        dlg.setWindowTitle(f"Đổi role user #{uid}")
+        dlg.setMinimumWidth(420)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        role_combo = QComboBox()
+        role_combo.addItem("ADMIN", "ADMIN")
+        role_combo.addItem("EMPLOYEE", "EMPLOYEE")
+        form.addRow("Role", role_combo)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Lưu")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                user_service.admin_set_role(uid, str(role_combo.currentData()))
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Đổi role", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            on_refresh()
+
+    def _admin_reset_password(self, parent: QWidget, uid: int, on_refresh) -> None:
+        dlg = QDialog(parent)
+        dlg.setWindowTitle(f"Reset mật khẩu user #{uid}")
+        dlg.setMinimumWidth(420)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        pw = QLineEdit()
+        pw.setEchoMode(QLineEdit.EchoMode.Password)
+        confirm = QLineEdit()
+        confirm.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("Mật khẩu mới *", pw)
+        form.addRow("Xác nhận *", confirm)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Reset")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            if pw.text() != confirm.text():
+                QMessageBox.warning(dlg, "Reset mật khẩu", "Mật khẩu xác nhận không khớp.")
+                return
+            try:
+                user_service.admin_reset_password(uid, pw.text())
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Reset mật khẩu", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            on_refresh()
+
+    def _admin_toggle_active(self, parent: QWidget, uid: int, is_active: bool, on_refresh) -> None:
+        action = "Khoá" if is_active else "Mở khoá"
+        confirm = QMessageBox.question(parent, action, f"Bạn muốn {action.lower()} user #{uid}?")
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            user_service.admin_set_active(uid, is_active=not is_active)
+        except user_service.UserError as exc:
+            QMessageBox.warning(parent, action, str(exc))
+            return
+        on_refresh()
 
     def _show_change_password_dialog(self) -> None:
         user = Session.current()
@@ -1306,6 +1720,81 @@ class PetCareApp(QMainWindow):
                 QMessageBox.critical(dlg, "Lỗi hệ thống", str(exc))
                 return
             QMessageBox.information(dlg, "Đổi mật khẩu", "Đổi mật khẩu thành công.")
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        dlg.exec()
+
+    def _show_register_dialog(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Đăng ký tài khoản nhân viên")
+        dlg.setMinimumWidth(520)
+        self._install_pet_background(dlg, overlay_color=(11, 30, 63, 155))
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(12)
+
+        title = QLabel("Tạo tài khoản (vai trò: Nhân viên)")
+        title.setStyleSheet("font: 800 12pt 'Segoe UI'; color: rgba(255,255,255,0.92);")
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        username = QLineEdit()
+        full_name = QLineEdit()
+        phone = QLineEdit()
+        password = QLineEdit()
+        confirm = QLineEdit()
+        password.setEchoMode(QLineEdit.EchoMode.Password)
+        confirm.setEchoMode(QLineEdit.EchoMode.Password)
+
+        form.addRow("Username *", username)
+        form.addRow("Họ tên *", full_name)
+        form.addRow("SĐT", phone)
+        form.addRow("Mật khẩu *", password)
+        form.addRow("Xác nhận *", confirm)
+        layout.addLayout(form)
+
+        hint = QLabel("Username: chữ/số và . _ - (3–50 ký tự). Mật khẩu ≥ 6 ký tự.")
+        hint.setStyleSheet("color: rgba(219,234,254,0.75); font: 600 9pt 'Segoe UI';")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn is not None:
+            ok_btn.setText("Tạo tài khoản")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn is not None:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            if password.text() != confirm.text():
+                QMessageBox.warning(dlg, "Đăng ký", "Mật khẩu xác nhận không khớp.")
+                return
+            try:
+                user_id = user_service.register_employee(
+                    username=username.text(),
+                    password=password.text(),
+                    full_name=full_name.text(),
+                    phone=phone.text(),
+                )
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Đăng ký", str(exc))
+                return
+            QMessageBox.information(
+                dlg,
+                "Đăng ký",
+                f"Tạo tài khoản thành công (ID: {user_id}).\nBạn có thể đăng nhập ngay.",
+            )
+            # prefill login form
+            self._login.usernameEdit.setText(username.text().strip())
+            self._login.passwordEdit.clear()
             dlg.accept()
 
         buttons.accepted.connect(_on_ok)

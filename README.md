@@ -1,5 +1,16 @@
 --File sơ đồ class và ERD nằm trong thư mục assets
 
+- Thành viên trong nhóm
+1. Quàng Duy Thái (Trưởng nhóm)
+2. Trương Hoài Sơn (Thành viên)
+3. Trần Đình Dũng (Thành viên)
+
+- Công nghệ sử dụng:
+    + Python
+    + MySQL
+    + QT Design
+    + Git, GitHub
+
 Mô tả các chức năng của ứng dụng
 1. Mục tiêu hệ thống
 
@@ -11,6 +22,7 @@ Xây dựng phần mềm giúp:
 - Tính tiền và xuất hóa đơn
 - Theo dõi doanh thu
 2. Các chức năng chính
+
 2.1 Quản lý khách hàng
 - Thêm / sửa / xóa khách hàng
 - Tìm kiếm khách hàng theo tên / SĐT
@@ -18,6 +30,7 @@ Xây dựng phần mềm giúp:
     + Họ tên
     + Số điện thoại
     + Địa chỉ
+
 2.2 Quản lý thú cưng
 - Mỗi khách hàng có thể có nhiều thú cưng
 - Thêm / sửa / xóa thú cưng
@@ -27,6 +40,7 @@ Xây dựng phần mềm giúp:
     + Giống
     + Tuổi
     + Ghi chú sức khỏe
+
 2.3 Quản lý dịch vụ
 - Danh sách dịch vụ:
     + Tắm rửa
@@ -35,6 +49,7 @@ Xây dựng phần mềm giúp:
     + Spa
 - Thêm / sửa / xóa dịch vụ
 - Giá dịch vụ
+
 2.4 Đặt lịch hẹn
 - Tạo lịch cho thú cưng
 - Chọn:
@@ -46,14 +61,17 @@ Xây dựng phần mềm giúp:
     + Chờ xử lý
     + Đang thực hiện
     + Hoàn thành
+
 2.5 Thanh toán & hóa đơn
 - Tính tổng tiền theo dịch vụ
 - Xuất hóa đơn
 - Lưu lịch sử giao dịch
+
 2.6 Thống kê & báo cáo
 - Doanh thu theo ngày / tháng
 - Số lượng khách hàng
 - Dịch vụ phổ biến
+
 2.7 Đăng nhập hệ thống
 - Phân quyền:
     + Admin
