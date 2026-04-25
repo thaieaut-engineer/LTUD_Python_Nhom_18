@@ -55,6 +55,62 @@ def _ui_path(name: str) -> str:
     return str(_repo_root() / "ui" / name)
 
 
+def _build_action_button(
+    text: str,
+    bg: str,
+    fg: str,
+    *,
+    hover: str | None = None,
+    hover_fg: str | None = None,
+) -> QPushButton:
+    """Tao nut action dung trong cot 'Thao tac' cua bang.
+
+    - Override min-height/min-width tu QSS global (de tat min-height:34px).
+    - Tinh chieu rong toi thieu theo do dai chu (font metrics) + padding,
+      tranh truong hop ResizeToContents bop hep nut.
+    """
+    btn = QPushButton(text)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    hover_bg = hover or bg
+    hover_color = hover_fg or fg
+    btn.setStyleSheet(
+        "QPushButton{"
+        f"background:{bg};color:{fg};border:none;"
+        "padding:4px 14px;border-radius:8px;"
+        "font:700 10pt 'Segoe UI';"
+        "min-height:32px;min-width:0;"
+        "}"
+        "QPushButton:hover{"
+        f"background:{hover_bg};color:{hover_color};"
+        "}"
+    )
+    btn.setMinimumHeight(32)
+    fm = QFontMetrics(btn.font())
+    text_w = fm.horizontalAdvance(text)
+    btn.setMinimumWidth(text_w + 32)
+    return btn
+
+
+def _wrap_action_buttons(buttons: list[QPushButton]) -> QWidget:
+    """Goi list nut action vao 1 QWidget can chinh san sang gan vao QTableWidget.
+
+    Tinh san minimumSize de QHeaderView::ResizeToContents lam viec dung.
+    """
+    w = QWidget()
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(8, 4, 8, 4)
+    lay.setSpacing(8)
+    total_w = 16
+    max_h = 0
+    for b in buttons:
+        lay.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
+        total_w += b.minimumWidth() + 8
+        max_h = max(max_h, b.minimumHeight())
+    lay.addStretch(1)
+    w.setMinimumSize(total_w, max_h + 8)
+    return w
+
+
 class PetBackground(QLabel):
     """Ảnh nền thú cưng tự động scale theo kích thước parent (cover + overlay)."""
 
@@ -421,33 +477,17 @@ class PetCareApp(QMainWindow):
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        table.setColumnWidth(6, 260)
 
     def _make_invoice_actions(self, *, invoice_id: int) -> QWidget:
-        w = QWidget()
-        lay = QHBoxLayout(w)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(6)
-
-        btn_view = QPushButton("Xem")
-        btn_view.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_view.setStyleSheet(
-            "QPushButton{background:#EEF2FF;color:#3730A3;border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
-            "QPushButton:hover{background:#E0E7FF;}"
-        )
+        btn_view = _build_action_button("Xem", "#EEF2FF", "#3730A3", hover="#E0E7FF")
         btn_view.clicked.connect(lambda: self._show_invoice_detail(invoice_id))
 
-        btn_pay = QPushButton("Thanh toán")
-        btn_pay.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_pay.setStyleSheet(
-            "QPushButton{background:#DCFCE7;color:#166534;border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
-            "QPushButton:hover{background:#BBF7D0;}"
-        )
+        btn_pay = _build_action_button("Thanh toán", "#DCFCE7", "#166534", hover="#BBF7D0")
         btn_pay.clicked.connect(lambda: self._show_payment_dialog(invoice_id))
 
-        lay.addWidget(btn_view)
-        lay.addWidget(btn_pay)
-        return w
+        return _wrap_action_buttons([btn_view, btn_pay])
 
     def _show_invoice_center(self) -> None:
         """Nut 'Tao hoa don' -> mo dialog chon appointment hoan thanh chua co invoice."""
@@ -660,9 +700,13 @@ class PetCareApp(QMainWindow):
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        table.verticalHeader().setVisible(False)
+        vh = table.verticalHeader()
+        vh.setVisible(False)
+        vh.setDefaultSectionSize(58)
+        vh.setMinimumSectionSize(58)
         table.setAlternatingRowColors(True)
         table.horizontalHeader().setStretchLastSection(True)
+        table.horizontalHeader().setMinimumSectionSize(80)
 
     def _filter_table(self, table: QTableWidget, query: str, cols: tuple[int, ...]) -> None:
         q = (query or "").strip().lower()
@@ -675,7 +719,10 @@ class PetCareApp(QMainWindow):
 
     def _setup_appointments_table(self, table: QTableWidget) -> None:
         table.setAlternatingRowColors(True)
-        table.verticalHeader().setVisible(False)
+        vh = table.verticalHeader()
+        vh.setVisible(False)
+        vh.setDefaultSectionSize(58)
+        vh.setMinimumSectionSize(58)
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         table.setEditTriggers(
@@ -1453,7 +1500,8 @@ class PetCareApp(QMainWindow):
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        table.setColumnWidth(4, 220)
 
     def _render_services_table(self) -> None:
         services_page = self._pages.get("services")
@@ -1600,31 +1648,15 @@ class PetCareApp(QMainWindow):
             lay.addWidget(lbl, 0, Qt.AlignmentFlag.AlignCenter)
             return w
 
-        w = QWidget()
-        lay = QHBoxLayout(w)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(8)
-
-        btn_edit = QPushButton("Sửa")
-        btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_edit.setStyleSheet(
-            "QPushButton{background:#EEF2FF;color:#3730A3;border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
-            "QPushButton:hover{background:#E0E7FF;}"
-        )
+        btn_edit = _build_action_button("Sửa", "#EEF2FF", "#3730A3", hover="#E0E7FF")
         btn_edit.clicked.connect(lambda: on_edit(None))
 
-        btn_del = QPushButton(delete_text)
-        btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_del.setStyleSheet(
-            "QPushButton{background:#FEE2E2;color:#B91C1C;border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
-            "QPushButton:hover{background:#FCA5A5;color:#7F1D1D;}"
+        btn_del = _build_action_button(
+            delete_text, "#FEE2E2", "#B91C1C", hover="#FCA5A5", hover_fg="#7F1D1D"
         )
         btn_del.clicked.connect(lambda: on_delete(None))
 
-        lay.addWidget(btn_edit)
-        lay.addWidget(btn_del)
-        lay.addStretch(1)
-        return w
+        return _wrap_action_buttons([btn_edit, btn_del])
 
     def _on_add_customer_clicked(self) -> None:
         dlg = QDialog(self)
@@ -2161,35 +2193,23 @@ class PetCareApp(QMainWindow):
         dlg.exec()
 
     def _make_admin_actions(self, *, uid: int, is_active: bool, on_refresh, parent: QWidget) -> QWidget:
-        w = QWidget()
-        lay = QHBoxLayout(w)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(6)
-
-        def _btn(text: str, bg: str, fg: str):
-            b = QPushButton(text)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet(
-                f"QPushButton{{background:{bg};color:{fg};border:none;padding:4px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}}"
-                f"QPushButton:hover{{opacity:0.9;}}"
-            )
-            return b
-
-        btn_edit = _btn("Sửa", "#EEF2FF", "#3730A3")
-        btn_role = _btn("Role", "#E0F2FE", "#075985")
-        btn_pw = _btn("Reset PW", "#FEF9C3", "#854D0E")
-        btn_lock = _btn("Mở" if not is_active else "Khoá", "#FEE2E2", "#B91C1C")
+        btn_edit = _build_action_button("Sửa", "#EEF2FF", "#3730A3", hover="#E0E7FF")
+        btn_role = _build_action_button("Role", "#E0F2FE", "#075985", hover="#BAE6FD")
+        btn_pw = _build_action_button("Reset PW", "#FEF9C3", "#854D0E", hover="#FEF08A")
+        btn_lock = _build_action_button(
+            "Mở" if not is_active else "Khoá",
+            "#FEE2E2",
+            "#B91C1C",
+            hover="#FCA5A5",
+            hover_fg="#7F1D1D",
+        )
 
         btn_edit.clicked.connect(lambda: self._admin_edit_user(parent, uid, on_refresh))
         btn_role.clicked.connect(lambda: self._admin_change_role(parent, uid, on_refresh))
         btn_pw.clicked.connect(lambda: self._admin_reset_password(parent, uid, on_refresh))
         btn_lock.clicked.connect(lambda: self._admin_toggle_active(parent, uid, is_active, on_refresh))
 
-        lay.addWidget(btn_edit)
-        lay.addWidget(btn_role)
-        lay.addWidget(btn_pw)
-        lay.addWidget(btn_lock)
-        return w
+        return _wrap_action_buttons([btn_edit, btn_role, btn_pw, btn_lock])
 
     def _admin_add_user(self, parent: QWidget) -> None:
         dlg = QDialog(parent)

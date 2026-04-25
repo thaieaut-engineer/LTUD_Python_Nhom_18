@@ -23,14 +23,14 @@ INSERT INTO user (role_id, username, password_hash, full_name, phone, is_active)
 
 -- ---------- service ----------
 INSERT INTO service (name, price, description, duration_min, is_active) VALUES
-    ('Tam goi co ban',       150000, 'Tam, say kho, ve sinh tai', 45, 1),
-    ('Tam goi cao cap',      250000, 'Tam spa + xit thom',        60, 1),
-    ('Cat tia long',         200000, 'Cat theo yeu cau',          60, 1),
-    ('Ve sinh tai - mat',     80000, 'Lam sach tai, nho long tai', 20, 1),
-    ('Cat mong',              50000, 'Cat mong chan',             10, 1),
-    ('Kham benh tong quat',  300000, 'Kham + tu van',             30, 1),
-    ('Spa thu gian',         350000, 'Spa tron goi',              90, 1),
-    ('Tiem phong (goi co ban)', 500000, 'Vaccine co ban',         15, 1);
+    (N'Tắm gội cơ bản',           150000, N'Tắm, sấy khô, vệ sinh tai',  45, 1),
+    (N'Tắm gội cao cấp',          250000, N'Tắm spa + xịt thơm',         60, 1),
+    (N'Cắt tỉa lông',             200000, N'Cắt theo yêu cầu',           60, 1),
+    (N'Vệ sinh tai - mắt',         80000, N'Làm sạch tai, nhổ lông tai', 20, 1),
+    (N'Cắt móng',                  50000, N'Cắt móng chân',              10, 1),
+    (N'Khám bệnh tổng quát',      300000, N'Khám + tư vấn',              30, 1),
+    (N'Spa thư giãn',             350000, N'Spa trọn gói',               90, 1),
+    (N'Tiêm phòng (gói cơ bản)',  500000, N'Vaccine cơ bản',             15, 1);
 
 -- ---------- customer ----------
 INSERT INTO customer (full_name, phone, address, email) VALUES
