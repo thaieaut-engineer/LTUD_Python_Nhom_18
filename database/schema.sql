@@ -223,6 +223,27 @@ CREATE TABLE payment (
     INDEX idx_pay_paid_at (paid_at)
 ) ENGINE=InnoDB;
 
+-- ---------------------------------------------------------------------
+-- 11. activity_log (optional - nhat ky thao tac ADMIN)
+-- ---------------------------------------------------------------------
+CREATE TABLE activity_log (
+    id              BIGINT          AUTO_INCREMENT PRIMARY KEY,
+    actor_user_id   INT             NOT NULL,
+    actor_username  VARCHAR(50)     NOT NULL,
+    action          VARCHAR(50)     NOT NULL,
+    entity          VARCHAR(50)     NULL,
+    entity_id       INT             NULL,
+    message         VARCHAR(255)    NULL,
+    extra           TEXT            NULL,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_activity_log_user
+        FOREIGN KEY (actor_user_id) REFERENCES user(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    INDEX idx_act_created (created_at),
+    INDEX idx_act_actor (actor_user_id),
+    INDEX idx_act_entity (entity, entity_id)
+) ENGINE=InnoDB;
+
 -- =====================================================================
 -- VIEWS tien loi cho bao cao
 -- =====================================================================

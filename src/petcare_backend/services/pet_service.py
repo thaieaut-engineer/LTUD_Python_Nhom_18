@@ -4,6 +4,7 @@ from __future__ import annotations
 from mysql.connector import Error as MySQLError
 
 from ..dao import pet_dao
+from ..activity_log import log_admin
 
 
 class PetError(Exception):
@@ -39,7 +40,15 @@ def create_pet(
         raise PetError("Tuổi không hợp lệ.")
 
     try:
-        return pet_dao.create(customer_id, name, species, breed, age, gender, health_note)
+        new_id = pet_dao.create(customer_id, name, species, breed, age, gender, health_note)
+        log_admin(
+            "CREATE_PET",
+            entity="pet",
+            entity_id=int(new_id),
+            message=f"Tạo thú cưng '{name}'",
+            extra={"customer_id": int(customer_id), "species": species},
+        )
+        return new_id
     except MySQLError as exc:
         raise PetError("Không thể thêm thú cưng. Kiểm tra dữ liệu đầu vào.") from exc
 
@@ -71,6 +80,13 @@ def update_pet(
 
     try:
         pet_dao.update(pet_id, customer_id, name, species, breed, age, gender, health_note)
+        log_admin(
+            "UPDATE_PET",
+            entity="pet",
+            entity_id=int(pet_id),
+            message=f"Cập nhật thú cưng '{name}'",
+            extra={"customer_id": int(customer_id), "species": species},
+        )
     except MySQLError as exc:
         raise PetError("Không thể cập nhật thú cưng.") from exc
 
@@ -78,6 +94,7 @@ def update_pet(
 def delete_pet(pet_id: int) -> None:
     try:
         pet_dao.delete(pet_id)
+        log_admin("DELETE_PET", entity="pet", entity_id=int(pet_id), message="Xoá thú cưng")
     except MySQLError as exc:
         raise PetError("Không thể xoá thú cưng vì đã phát sinh lịch hẹn.") from exc
 

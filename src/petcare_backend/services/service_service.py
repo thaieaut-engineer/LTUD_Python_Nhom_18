@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from mysql.connector import Error as MySQLError
 
 from ..dao import service_dao
+from ..activity_log import log_admin
 
 
 class ServiceError(Exception):
@@ -45,7 +46,15 @@ def create_service(
         raise ServiceError("Giá không hợp lệ.")
 
     try:
-        return service_dao.create(name, price_dec, description, duration_min, is_active)
+        new_id = service_dao.create(name, price_dec, description, duration_min, is_active)
+        log_admin(
+            "CREATE_SERVICE",
+            entity="service",
+            entity_id=int(new_id),
+            message=f"Tạo dịch vụ '{name}'",
+            extra={"price": str(price_dec), "is_active": bool(is_active)},
+        )
+        return new_id
     except MySQLError as exc:
         if "Duplicate" in str(exc) or "duplicate" in str(exc):
             raise ServiceError("Tên dịch vụ đã tồn tại.") from exc
@@ -73,6 +82,13 @@ def update_service(
 
     try:
         service_dao.update(service_id, name, price_dec, description, duration_min, is_active)
+        log_admin(
+            "UPDATE_SERVICE",
+            entity="service",
+            entity_id=int(service_id),
+            message=f"Cập nhật dịch vụ '{name}'",
+            extra={"price": str(price_dec), "is_active": bool(is_active)},
+        )
     except MySQLError as exc:
         if "Duplicate" in str(exc) or "duplicate" in str(exc):
             raise ServiceError("Tên dịch vụ đã tồn tại.") from exc
@@ -82,6 +98,7 @@ def update_service(
 def deactivate_service(service_id: int) -> None:
     try:
         service_dao.delete(service_id)
+        log_admin("DEACTIVATE_SERVICE", entity="service", entity_id=int(service_id), message="Ẩn/Xoá dịch vụ")
     except MySQLError as exc:
         raise ServiceError("Không thể xoá/ẩn dịch vụ.") from exc
 

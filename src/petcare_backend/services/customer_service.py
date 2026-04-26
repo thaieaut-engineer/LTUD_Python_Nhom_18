@@ -6,6 +6,7 @@ import re
 from mysql.connector import Error as MySQLError
 
 from ..dao import customer_dao
+from ..activity_log import log_admin
 
 
 class CustomerError(Exception):
@@ -33,7 +34,15 @@ def create_customer(full_name: str, phone: str, address: str | None = None, emai
         raise CustomerError("Số điện thoại không hợp lệ.")
 
     try:
-        return customer_dao.create(full_name=full_name, phone=phone, address=address, email=email)
+        new_id = customer_dao.create(full_name=full_name, phone=phone, address=address, email=email)
+        log_admin(
+            "CREATE_CUSTOMER",
+            entity="customer",
+            entity_id=int(new_id),
+            message=f"Tạo khách hàng '{full_name}'",
+            extra={"phone": phone},
+        )
+        return new_id
     except MySQLError as exc:
         if "Duplicate" in str(exc) or "duplicate" in str(exc):
             raise CustomerError("Số điện thoại đã tồn tại.") from exc
@@ -55,6 +64,13 @@ def update_customer(customer_id: int, full_name: str, phone: str, address: str |
 
     try:
         customer_dao.update(customer_id=customer_id, full_name=full_name, phone=phone, address=address, email=email)
+        log_admin(
+            "UPDATE_CUSTOMER",
+            entity="customer",
+            entity_id=int(customer_id),
+            message=f"Cập nhật khách hàng '{full_name}'",
+            extra={"phone": phone},
+        )
     except MySQLError as exc:
         if "Duplicate" in str(exc) or "duplicate" in str(exc):
             raise CustomerError("Số điện thoại đã tồn tại.") from exc
@@ -64,6 +80,7 @@ def update_customer(customer_id: int, full_name: str, phone: str, address: str |
 def delete_customer(customer_id: int) -> None:
     try:
         customer_dao.delete(customer_id)
+        log_admin("DELETE_CUSTOMER", entity="customer", entity_id=int(customer_id), message="Xoá khách hàng")
     except MySQLError as exc:
         # co appointment -> RESTRICT
         raise CustomerError(

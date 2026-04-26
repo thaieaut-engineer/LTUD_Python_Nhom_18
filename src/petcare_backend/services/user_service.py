@@ -6,6 +6,7 @@ import re
 from mysql.connector import Error as MySQLError
 
 from ..dao import role_dao, user_dao
+from ..activity_log import log_admin
 from ..security import hash_password
 from ..session import Session
 
@@ -90,13 +91,21 @@ def admin_create_user(role_name: str, username: str, password: str, full_name: s
         raise UserError(f"Thiếu role {role_name} trong database.")
 
     try:
-        return user_dao.create(
+        new_id = user_dao.create(
             role_id=int(role["id"]),
             username=username,
             password_hash=hash_password(password),
             full_name=full_name,
             phone=phone,
         )
+        log_admin(
+            "CREATE_USER",
+            entity="user",
+            entity_id=int(new_id),
+            message=f"Tạo tài khoản '{username}' ({role_name})",
+            extra={"role": role_name, "full_name": full_name},
+        )
+        return new_id
     except MySQLError as exc:
         if "Duplicate" in str(exc) or "duplicate" in str(exc):
             raise UserError("Username đã tồn tại.") from exc
@@ -112,6 +121,13 @@ def admin_update_user(user_id: int, full_name: str, phone: str | None = None) ->
     if phone and not _PHONE_RE.match(phone):
         raise UserError("Số điện thoại không hợp lệ.")
     user_dao.update_profile(user_id, full_name, phone)
+    log_admin(
+        "UPDATE_USER",
+        entity="user",
+        entity_id=int(user_id),
+        message="Cập nhật thông tin tài khoản",
+        extra={"full_name": full_name, "phone": phone},
+    )
 
 
 def admin_set_role(user_id: int, role_name: str) -> None:
@@ -123,11 +139,23 @@ def admin_set_role(user_id: int, role_name: str) -> None:
     if role is None:
         raise UserError(f"Thiếu role {role_name} trong database.")
     user_dao.update_role(user_id, int(role["id"]))
+    log_admin(
+        "SET_USER_ROLE",
+        entity="user",
+        entity_id=int(user_id),
+        message=f"Đổi role -> {role_name}",
+    )
 
 
 def admin_set_active(user_id: int, is_active: bool) -> None:
     _require_admin()
     user_dao.set_active(user_id, is_active=is_active)
+    log_admin(
+        "SET_USER_ACTIVE",
+        entity="user",
+        entity_id=int(user_id),
+        message=("Kích hoạt tài khoản" if is_active else "Khoá tài khoản"),
+    )
 
 
 def admin_reset_password(user_id: int, new_password: str) -> None:
@@ -136,4 +164,5 @@ def admin_reset_password(user_id: int, new_password: str) -> None:
     if len(new_password) < 6:
         raise UserError("Mật khẩu phải có ít nhất 6 ký tự.")
     user_dao.update_password(user_id, hash_password(new_password))
+    log_admin("RESET_USER_PASSWORD", entity="user", entity_id=int(user_id), message="Reset mật khẩu")
 
