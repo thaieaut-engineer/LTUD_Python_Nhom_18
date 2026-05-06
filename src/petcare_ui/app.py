@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -360,12 +361,8 @@ class PetCareApp(QMainWindow):
 
         pets_page = self._pages.get("pets")
         if pets_page:
-            table: QTableWidget = pets_page.petsTable
-            self._setup_table(table)
-            table.setIconSize(QSize(self._pets_thumb, self._pets_thumb))
             pets_page.customerFilterCombo.currentIndexChanged.connect(lambda _: self._reload_pets())
             pets_page.addPetButton.clicked.connect(self._on_add_pet_clicked)
-            table.cellDoubleClicked.connect(self._on_pet_image_double_clicked)
 
         ap_page = self._pages.get("appointments")
         if ap_page:
@@ -1531,50 +1528,93 @@ class PetCareApp(QMainWindow):
 
     def _render_pets_table(self) -> None:
         pets_page = self._pages.get("pets")
-        if not pets_page:
+        if not pets_page or not hasattr(pets_page, "petsGridLayout"):
             return
-        table: QTableWidget = pets_page.petsTable
-        thumb = self._pets_thumb
-        owner_name = {c.id: c.full_name for c in self._customers}
-        table.setRowCount(len(self._pets))
-        for r, p in enumerate(self._pets):
-            table.setRowHeight(r, thumb + 14)
 
-            img_item = QTableWidgetItem("📷")
-            img_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid: QGridLayout = pets_page.petsGridLayout
+        while grid.count():
+            item = grid.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+
+        thumb = self._pets_thumb + 8
+        owner_name = {c.id: c.full_name for c in self._customers}
+
+        if not self._pets:
+            empty = QLabel("Chưa có thú cưng nào.")
+            empty.setStyleSheet("color:#64748B; font:700 10pt 'Segoe UI'; padding: 24px;")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            grid.addWidget(empty, 0, 0, 1, 1)
+            return
+
+        cols = 4
+
+        for col in range(cols):
+            grid.setColumnStretch(col, 1)
+
+        for idx, p in enumerate(self._pets):
+            card = QFrame()
+            card.setStyleSheet(
+                "QFrame{background:#FFFFFF; border:1px solid #D6E2F7; border-radius:14px;}"
+                "QLabel#petName{font:800 11pt 'Segoe UI'; color:#0F172A;}"
+                "QLabel{color:#334155; font:10pt 'Segoe UI';}"
+            )
+            box = QVBoxLayout(card)
+            box.setContentsMargins(12, 12, 12, 12)
+            box.setSpacing(8)
+
+            img_btn = QPushButton("📷")
+            img_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            img_btn.setFixedSize(thumb, thumb)
+            img_btn.clicked.connect(lambda _, pid=p.id: self._on_pet_image_upload_clicked(pid))
+            img_btn.setStyleSheet(
+                "QPushButton{background:#E2E8F0; border:1px dashed #94A3B8; border-radius:12px; font-size:20px;}"
+                "QPushButton:hover{background:#CBD5E1;}"
+            )
             img_path = self._pet_images.get((p.customer_id, p.id))
             if img_path and os.path.exists(img_path):
                 pix = QPixmap(img_path)
                 if not pix.isNull():
-                    icon = QIcon(
-                        pix.scaled(
-                            thumb,
-                            thumb,
-                            Qt.AspectRatioMode.KeepAspectRatio,
-                            Qt.TransformationMode.SmoothTransformation,
-                        )
-                    )
-                    img_item.setIcon(icon)
-                    img_item.setText("")
-            table.setItem(r, 0, img_item)
+                    img_btn.setIcon(QIcon(pix))
+                    img_btn.setIconSize(QSize(thumb - 8, thumb - 8))
+                    img_btn.setText("")
+            box.addWidget(img_btn, 0, Qt.AlignmentFlag.AlignHCenter)
 
-            name_item = QTableWidgetItem(p.name)
-            name_item.setData(Qt.ItemDataRole.UserRole, p.id)
-            table.setItem(r, 1, name_item)
-            table.setItem(r, 2, QTableWidgetItem(p.species))
-            table.setItem(r, 3, QTableWidgetItem(p.breed or ""))
-            table.setItem(r, 4, QTableWidgetItem("" if p.age is None else str(p.age)))
-            table.setItem(r, 5, QTableWidgetItem(owner_name.get(p.customer_id, str(p.customer_id))))
-            table.setCellWidget(
-                r,
-                6,
-                self._make_row_actions(
-                    on_edit=lambda _, pid=p.id: self._on_edit_pet_clicked(pid),
-                    on_delete=lambda _, pid=p.id: self._on_delete_pet_clicked(pid),
-                ),
+            name = QLabel(p.name)
+            name.setObjectName("petName")
+            box.addWidget(name)
+            box.addWidget(QLabel(f"Loài: {p.species}"))
+            box.addWidget(QLabel(f"Giống: {p.breed or '—'}"))
+            box.addWidget(QLabel(f"Tuổi: {'—' if p.age is None else p.age}"))
+            box.addWidget(QLabel(f"Chủ: {owner_name.get(p.customer_id, str(p.customer_id))}"))
+
+            actions = self._make_row_actions(
+                on_edit=lambda _, pid=p.id: self._on_edit_pet_clicked(pid),
+                on_delete=lambda _, pid=p.id: self._on_delete_pet_clicked(pid),
             )
+            box.addWidget(actions)
+            box.addStretch(1)
 
-        table.setColumnWidth(0, thumb + 18)
+            row = idx // cols
+            col = idx % cols
+            grid.addWidget(card, row, col)
+
+    def _on_pet_image_upload_clicked(self, pet_id: int) -> None:
+        pet = next((p for p in self._pets if p.id == pet_id), None)
+        if pet is None:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn ảnh thú cưng",
+            "",
+            "Images (*.png *.jpg *.jpeg *.webp)",
+        )
+        if not path:
+            return
+        self._pet_images[(pet.customer_id, pet.id)] = path
+        self._render_pets_table()
 
     def _refresh_pets_customer_filter(self) -> None:
         pets_page = self._pages.get("pets")
@@ -1611,7 +1651,7 @@ class PetCareApp(QMainWindow):
         if row < 0 or column != 0:
             return
         pets_page = self._pages.get("pets")
-        if not pets_page:
+        if not pets_page or not hasattr(pets_page, "petsTable"):
             return
         table: QTableWidget = pets_page.petsTable
         name_item = table.item(row, 1)
@@ -2052,8 +2092,14 @@ class PetCareApp(QMainWindow):
 
         pets_page = self._pages.get("pets")
         if pets_page:
-            if hasattr(pets_page, "petsTable"):
-                pets_page.petsTable.setRowCount(0)
+            if hasattr(pets_page, "petsGridLayout"):
+                grid: QGridLayout = pets_page.petsGridLayout
+                while grid.count():
+                    item = grid.takeAt(0)
+                    w = item.widget()
+                    if w is not None:
+                        w.setParent(None)
+                        w.deleteLater()
             if hasattr(pets_page, "customerFilterCombo"):
                 pets_page.customerFilterCombo.blockSignals(True)
                 pets_page.customerFilterCombo.clear()
