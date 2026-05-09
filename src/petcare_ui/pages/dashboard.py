@@ -367,7 +367,8 @@ class DashboardView(QWidget):
         root.addLayout(bottom_grid)
 
         self._apply_preset(self.PRESET_7D)
-        self.reload()
+        # Khong tu reload o __init__ - de tranh query DB truoc khi user login.
+        # `_set_stack_page` (app.py) se goi reload() khi mo trang dashboard.
 
     # ------------------------------------------------------------------
     # Event handlers

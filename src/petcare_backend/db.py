@@ -28,6 +28,9 @@ def _get_pool() -> pooling.MySQLConnectionPool:
             charset="utf8mb4",
             collation="utf8mb4_unicode_ci",
             autocommit=False,
+            # Dung pure-Python implementation de tranh access violation
+            # cua C extension tren Python 3.14 khi MySQL khong ket noi duoc.
+            use_pure=True,
         )
     return _POOL
 

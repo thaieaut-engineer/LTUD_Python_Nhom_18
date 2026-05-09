@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QDateTime, QEvent, QSize
-from PyQt6.QtGui import QFontMetrics, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -54,6 +54,145 @@ def _repo_root() -> Path:
 
 def _ui_path(name: str) -> str:
     return str(_repo_root() / "ui" / name)
+
+
+_ACTION_ICON_PIX = 20
+_BITMAP_ICON_CACHE: dict[tuple[str, str, int], QIcon] = {}
+
+
+def _tinted_bitmap_icon(filename: str, fg_hex: str, px: int = _ACTION_ICON_PIX) -> QIcon | None:
+    """Tai PNG den-trang tu ui/icons, to mau fg_hex, scale px (cache)."""
+    cache_key = (filename, fg_hex, px)
+    if cache_key in _BITMAP_ICON_CACHE:
+        return _BITMAP_ICON_CACHE[cache_key]
+
+    path = _repo_root() / "ui" / "icons" / filename
+    if not path.is_file():
+        return None
+
+    raw = QPixmap(str(path))
+    if raw.isNull():
+        return None
+
+    scaled = raw.scaled(
+        px * 2,
+        px * 2,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    img = scaled.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    w, h = img.width(), img.height()
+    fg = QColor(fg_hex) if fg_hex.startswith("#") and len(fg_hex) == 7 else QColor("#334155")
+    out = QImage(w, h, QImage.Format.Format_ARGB32)
+    out.fill(0)
+
+    for y in range(h):
+        for x in range(w):
+            c = QColor(img.pixelColor(x, y))
+            if c.alpha() < 8:
+                continue
+            lum = (0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue()) / 255.0
+            strength = 1.0 - lum
+            if strength < 0.04:
+                continue
+            a = int(min(255, strength * (c.alpha() / 255.0) * 255))
+            out.setPixelColor(x, y, QColor(fg.red(), fg.green(), fg.blue(), a))
+
+    icon = QIcon(QPixmap.fromImage(out))
+    _BITMAP_ICON_CACHE[cache_key] = icon
+    return icon
+
+
+def _action_icon(kind: str, fg_hex: str) -> QIcon:
+    """Icon thao tac: edit/trash uu tien file ui/icons; view/hide ve vector."""
+    if kind == "edit":
+        ic = _tinted_bitmap_icon("action_edit.png", fg_hex)
+        if ic is not None:
+            return ic
+    elif kind == "trash":
+        ic = _tinted_bitmap_icon("action_trash.png", fg_hex)
+        if ic is not None:
+            return ic
+    return _vector_action_icon(kind, fg_hex)
+
+
+def _vector_action_icon(kind: str, fg_hex: str) -> QIcon:
+    """Icon don sac ~22px: but, thung rac, mat, mat gach (an)."""
+    hx = fg_hex.strip()
+    c = QColor(hx) if hx.startswith("#") and len(hx) == 7 else QColor("#334155")
+    d = 22
+    pix = QPixmap(d, d)
+    pix.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pix)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(c)
+    pen.setWidthF(1.75)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    if kind == "edit":
+        painter.drawLine(5, 15, 14, 6)
+        painter.drawLine(14, 6, 17, 4)
+        painter.drawLine(5, 15, 3, 17)
+    elif kind == "trash":
+        painter.drawLine(8, 6, 8, 7)
+        painter.drawLine(14, 6, 14, 7)
+        painter.drawLine(7, 7, 15, 7)
+        painter.drawLine(7, 7, 7, 17)
+        painter.drawLine(15, 7, 15, 17)
+        painter.drawLine(7, 17, 15, 17)
+        painter.drawLine(9, 10, 9, 15)
+        painter.drawLine(13, 10, 13, 15)
+    elif kind == "view":
+        painter.drawEllipse(3, 7, 16, 10)
+        painter.setBrush(c)
+        painter.drawEllipse(9, 10, 4, 4)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+    elif kind == "hide":
+        painter.drawEllipse(3, 7, 16, 10)
+        painter.setBrush(c)
+        painter.drawEllipse(9, 10, 4, 4)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        slash = QPen(c)
+        slash.setWidthF(2.35)
+        slash.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(slash)
+        painter.drawLine(4, 5, 18, 19)
+    painter.end()
+    return QIcon(pix)
+
+
+def _build_action_icon_button(
+    icon: QIcon,
+    tooltip: str,
+    bg: str,
+    fg: str,
+    *,
+    hover: str | None = None,
+    hover_fg: str | None = None,
+) -> QPushButton:
+    btn = QPushButton()
+    btn.setIcon(icon)
+    btn.setIconSize(QSize(_ACTION_ICON_PIX, _ACTION_ICON_PIX))
+    btn.setToolTip(tooltip)
+    btn.setAccessibleName(tooltip)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    hover_bg = hover or bg
+    hover_color = hover_fg or fg
+    btn.setStyleSheet(
+        "QPushButton{"
+        f"background:{bg};color:{fg};border:none;"
+        "padding:6px;border-radius:8px;"
+        "min-height:32px;min-width:32px;max-height:34px;max-width:40px;"
+        "}"
+        "QPushButton:hover{"
+        f"background:{hover_bg};color:{hover_color};"
+        "}"
+    )
+    btn.setFixedSize(36, 32)
+    return btn
 
 
 def _build_action_button(
@@ -478,7 +617,13 @@ class PetCareApp(QMainWindow):
         table.setColumnWidth(6, 260)
 
     def _make_invoice_actions(self, *, invoice_id: int) -> QWidget:
-        btn_view = _build_action_button("Xem", "#EEF2FF", "#3730A3", hover="#E0E7FF")
+        btn_view = _build_action_icon_button(
+            _action_icon("view", "#3730A3"),
+            "Xem chi tiết",
+            "#EEF2FF",
+            "#3730A3",
+            hover="#E0E7FF",
+        )
         btn_view.clicked.connect(lambda: self._show_invoice_detail(invoice_id))
 
         btn_pay = _build_action_button("Thanh toán", "#DCFCE7", "#166534", hover="#BBF7D0")
@@ -635,6 +780,30 @@ class PetCareApp(QMainWindow):
         dlg.exec()
 
     def _show_payment_dialog(self, invoice_id: int) -> None:
+        from decimal import Decimal
+
+        from src.petcare_backend.dao import invoice_dao, payment_dao
+
+        inv = invoice_dao.get_by_id(invoice_id)
+        if inv is None:
+            QMessageBox.warning(self, "Thanh toán", "Hóa đơn không tồn tại.")
+            return
+        total_amt = Decimal(str(inv.get("total_amount") or 0))
+        paid_amt = Decimal(str(payment_dao.sum_paid(invoice_id)))
+        default_pay = total_amt - paid_amt
+        if default_pay < 0:
+            default_pay = Decimal(0)
+        default_int = int(default_pay)
+        default_txt = f"{default_int:,}".replace(",", ".")
+
+        if default_int <= 0:
+            QMessageBox.information(
+                self,
+                "Thanh toán",
+                "Hóa đơn này không còn số tiền cần thanh toán.",
+            )
+            return
+
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Thanh toán hoá đơn #{invoice_id}")
         dlg.setMinimumWidth(520)
@@ -643,6 +812,7 @@ class PetCareApp(QMainWindow):
         root = QVBoxLayout(dlg)
         form = QFormLayout()
         amount = QLineEdit()
+        amount.setText(default_txt)
         method = QComboBox()
         method.addItem("Tiền mặt")
         method.addItem("Chuyển khoản")
@@ -1291,11 +1461,13 @@ class PetCareApp(QMainWindow):
                 pets_table.setItem(r, 1, QTableWidgetItem(p["species"]))
                 pets_table.setItem(r, 2, QTableWidgetItem(p["breed"] or ""))
                 pets_table.setItem(r, 3, QTableWidgetItem(str(p["age"])))
-                btn_del = QPushButton("Xoá")
-                btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn_del.setStyleSheet(
-                    "QPushButton{background:#FEE2E2;color:#B91C1C;border:none;padding:3px 10px;border-radius:6px;font:700 8pt 'Segoe UI';}"
-                    "QPushButton:hover{background:#FCA5A5;color:#7F1D1D;}"
+                btn_del = _build_action_icon_button(
+                    _action_icon("trash", "#B91C1C"),
+                    "Xóa",
+                    "#FEE2E2",
+                    "#B91C1C",
+                    hover="#FCA5A5",
+                    hover_fg="#7F1D1D",
                 )
                 btn_del.clicked.connect(lambda _=False, idx=r: _remove_pending_pet(idx))
                 pets_table.setCellWidget(r, 4, btn_del)
@@ -1688,11 +1860,24 @@ class PetCareApp(QMainWindow):
             lay.addWidget(lbl, 0, Qt.AlignmentFlag.AlignCenter)
             return w
 
-        btn_edit = _build_action_button("Sửa", "#EEF2FF", "#3730A3", hover="#E0E7FF")
+        btn_edit = _build_action_icon_button(
+            _action_icon("edit", "#3730A3"),
+            "Sửa",
+            "#EEF2FF",
+            "#3730A3",
+            hover="#E0E7FF",
+        )
         btn_edit.clicked.connect(lambda: on_edit(None))
 
-        btn_del = _build_action_button(
-            delete_text, "#FEE2E2", "#B91C1C", hover="#FCA5A5", hover_fg="#7F1D1D"
+        del_kind = "hide" if delete_text.strip().lower() == "ẩn" else "trash"
+        del_tip = "Ẩn" if del_kind == "hide" else "Xóa"
+        btn_del = _build_action_icon_button(
+            _action_icon(del_kind, "#B91C1C"),
+            del_tip,
+            "#FEE2E2",
+            "#B91C1C",
+            hover="#FCA5A5",
+            hover_fg="#7F1D1D",
         )
         btn_del.clicked.connect(lambda: on_delete(None))
 
@@ -2239,7 +2424,13 @@ class PetCareApp(QMainWindow):
         dlg.exec()
 
     def _make_admin_actions(self, *, uid: int, is_active: bool, on_refresh, parent: QWidget) -> QWidget:
-        btn_edit = _build_action_button("Sửa", "#EEF2FF", "#3730A3", hover="#E0E7FF")
+        btn_edit = _build_action_icon_button(
+            _action_icon("edit", "#3730A3"),
+            "Sửa",
+            "#EEF2FF",
+            "#3730A3",
+            hover="#E0E7FF",
+        )
         btn_role = _build_action_button("Role", "#E0F2FE", "#075985", hover="#BAE6FD")
         btn_pw = _build_action_button("Reset PW", "#FEF9C3", "#854D0E", hover="#FEF08A")
         btn_lock = _build_action_button(
@@ -2605,9 +2796,12 @@ class PetCareApp(QMainWindow):
             if w.property("page_key") == key:
                 stack.setCurrentIndex(i)
                 if key == "dashboard" and isinstance(w, DashboardView):
-                    try:
-                        w.reload()
-                    except Exception:
-                        pass
+                    # Chi reload dashboard sau khi user da dang nhap, tranh
+                    # query DB trong giai doan __init__ (truoc khi co session).
+                    if Session.current() is not None:
+                        try:
+                            w.reload()
+                        except Exception:
+                            pass
                 return
 
