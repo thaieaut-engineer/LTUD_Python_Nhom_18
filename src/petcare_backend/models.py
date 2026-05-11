@@ -58,6 +58,18 @@ class Service:
 
 
 @dataclass
+class Product:
+    id: int
+    name: str
+    category: str
+    price: Decimal
+    stock: int = 0
+    sku: str | None = None
+    description: str | None = None
+    is_active: bool = True
+
+
+@dataclass
 class Appointment:
     id: int
     customer_id: int

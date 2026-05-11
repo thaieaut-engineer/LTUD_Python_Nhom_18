@@ -76,6 +76,13 @@ border-radius: 16px;
     </layout>
    </item>
    <item>
+    <widget class="QLineEdit" name="searchEdit">
+     <property name="placeholderText">
+      <string>Tìm theo tên dịch vụ hoặc mô tả...</string>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QFrame" name="Card">
      <property name="objectName">
       <string>Card</string>

@@ -167,6 +167,19 @@
         </widget>
        </item>
        <item>
+        <widget class="QPushButton" name="navProducts">
+         <property name="text">
+          <string>  Đồ ăn / Phụ kiện</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="navAppointments">
          <property name="text">
           <string>  Đặt lịch</string>
@@ -183,6 +196,19 @@
         <widget class="QPushButton" name="navInvoices">
          <property name="text">
           <string>  Hóa đơn</string>
+         </property>
+         <property name="objectName">
+          <string>NavItem</string>
+         </property>
+         <property name="cursor">
+          <cursorShape>PointingHandCursor</cursorShape>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="navEmployees">
+         <property name="text">
+          <string>  Nhân viên</string>
          </property>
          <property name="objectName">
           <string>NavItem</string>

@@ -35,6 +35,7 @@ from src.petcare_backend.services import report_service
 from src.petcare_backend.services.report_service import (
     DailyRevenue,
     DashboardOverview,
+    EmployeePerformance,
     ServiceStat,
     VipCustomer,
 )
@@ -366,6 +367,35 @@ class DashboardView(QWidget):
 
         root.addLayout(bottom_grid)
 
+        # --- Doanh so theo nhan vien ---
+        emp_card = Card()
+        emp_lay = QVBoxLayout(emp_card)
+        emp_lay.setContentsMargins(18, 14, 18, 14)
+        emp_lay.setSpacing(8)
+        emp_head = QHBoxLayout()
+        emp_title = QLabel("Doanh số theo nhân viên")
+        emp_title.setStyleSheet("font:800 10pt 'Segoe UI';")
+        emp_head.addWidget(emp_title)
+        emp_head.addStretch(1)
+        self._emp_summary = QLabel()
+        self._emp_summary.setStyleSheet("color:#475569; font:700 9pt 'Segoe UI';")
+        emp_head.addWidget(self._emp_summary)
+        emp_lay.addLayout(emp_head)
+
+        self._emp_table = QTableWidget(0, 7)
+        self._emp_table.setHorizontalHeaderLabels([
+            "#",
+            "Nhân viên",
+            "Lịch hẹn",
+            "Hoàn thành",
+            "HĐ dịch vụ",
+            "HĐ bán lẻ",
+            "Tổng doanh thu",
+        ])
+        _prepare_table(self._emp_table)
+        emp_lay.addWidget(self._emp_table, 1)
+        root.addWidget(emp_card)
+
         self._apply_preset(self.PRESET_7D)
         # Khong tu reload o __init__ - de tranh query DB truoc khi user login.
         # `_set_stack_page` (app.py) se goi reload() khi mo trang dashboard.
@@ -425,6 +455,7 @@ class DashboardView(QWidget):
         self._safe_call(self._reload_range)
         self._safe_call(self._reload_top_services)
         self._safe_call(self._reload_vip)
+        self._safe_call(self._reload_employees)
 
     def _safe_call(self, fn: Callable[[], None]) -> None:
         try:
@@ -503,6 +534,47 @@ class DashboardView(QWidget):
             self._vip_table.setRowCount(1)
             self._vip_table.setSpan(0, 0, 1, self._vip_table.columnCount())
             self._vip_table.setItem(0, 0, _cell("Chưa có dữ liệu", center=True, muted=True))
+
+    def _reload_employees(self) -> None:
+        start, end = self._selected_range()
+        report = report_service.employee_performance_stats(start, end)
+        items = list(report.employees)
+        non_zero = [e for e in items if e.total_revenue or e.appointment_count]
+        if not non_zero:
+            fallback = report_service.employee_performance_stats()
+            items = list(fallback.employees)
+            self._emp_summary.setText(
+                "(không có dữ liệu trong khoảng — hiển thị toàn thời gian)"
+            )
+        else:
+            items = non_zero
+            self._emp_summary.setText(
+                f"Tổng doanh thu NV: {_VND(report.total_revenue)}"
+            )
+        self._fill_employee_table(items)
+
+    def _fill_employee_table(self, items: list[EmployeePerformance]) -> None:
+        self._emp_table.setRowCount(len(items))
+        for r, e in enumerate(items):
+            self._emp_table.setItem(r, 0, _cell(str(r + 1), center=True))
+            self._emp_table.setItem(r, 1, _cell(e.full_name))
+            self._emp_table.setItem(r, 2, _cell(str(e.appointment_count), center=True))
+            self._emp_table.setItem(
+                r,
+                3,
+                _cell(f"{e.appointment_done}/{e.appointment_count}", center=True),
+            )
+            self._emp_table.setItem(r, 4, _cell(_VND(e.service_revenue), right=True))
+            self._emp_table.setItem(r, 5, _cell(_VND(e.retail_revenue), right=True))
+            total_item = _cell(_VND(e.total_revenue), right=True)
+            total_item.setForeground(QColor("#0F172A"))
+            self._emp_table.setItem(r, 6, total_item)
+        if not items:
+            self._emp_table.setRowCount(1)
+            self._emp_table.setSpan(0, 0, 1, self._emp_table.columnCount())
+            self._emp_table.setItem(
+                0, 0, _cell("Chưa có dữ liệu nhân viên", center=True, muted=True)
+            )
 
 
 # ---------------------------------------------------------------------------

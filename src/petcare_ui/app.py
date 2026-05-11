@@ -41,7 +41,9 @@ from src.petcare_backend.services import customer_service, pet_service, service_
 from src.petcare_backend.services import user_service
 from src.petcare_backend.services import appointment_service
 from src.petcare_backend.services import invoice_service, payment_service
-from src.petcare_backend.models import Customer, Pet, Service
+from src.petcare_backend.services import product_service
+from src.petcare_backend.services import report_service
+from src.petcare_backend.models import Customer, Pet, Product, Service
 from src.petcare_backend.session import Session
 
 
@@ -323,6 +325,9 @@ class PetCareApp(QMainWindow):
         self._pets: list[Pet] = []
         self._pets_thumb: int = 72
         self._services_list: list[Service] = []
+        self._products_list: list[Product] = []
+        self._employees_list: list = []
+        self._employees_stats: list = []
         self._per_pet_service_container: QWidget | None = None
         self._per_pet_service_rows_layout: QVBoxLayout | None = None
         self._per_pet_service_combos: dict[str, QComboBox] = {}
@@ -452,8 +457,12 @@ class PetCareApp(QMainWindow):
         self._main.navCustomers.clicked.connect(lambda: self._set_active("customers"))
         self._main.navPets.clicked.connect(lambda: self._set_active("pets"))
         self._main.navServices.clicked.connect(lambda: self._set_active("services"))
+        if hasattr(self._main, "navProducts"):
+            self._main.navProducts.clicked.connect(lambda: self._set_active("products"))
         self._main.navAppointments.clicked.connect(lambda: self._set_active("appointments"))
         self._main.navInvoices.clicked.connect(lambda: self._set_active("invoices"))
+        if hasattr(self._main, "navEmployees"):
+            self._main.navEmployees.clicked.connect(lambda: self._set_active("employees"))
         self._main.logoutButton.clicked.connect(self._on_logout)
 
     def _load_pages(self) -> None:
@@ -474,12 +483,14 @@ class PetCareApp(QMainWindow):
         add("customers", "customers.ui")
         add("pets", "pets.ui")
         add("services", "services.ui")
+        add("products", "products.ui")
         add("appointments", "appointments.ui")
         ap_lay = self._pages["appointments"].layout()
         if isinstance(ap_lay, QVBoxLayout) and ap_lay.count() >= 2:
             ap_lay.setStretch(1, 1)
 
         add("invoices", "invoices.ui")
+        add("employees", "employees.ui")
 
     def _init_catalog_pages(self) -> None:
         """Khoi tao cac page danh muc (B2/B3/B4) + nghiep vu (C1-C3). Du lieu se load sau login."""
@@ -497,6 +508,28 @@ class PetCareApp(QMainWindow):
             self._setup_table(table)
             if hasattr(services_page, "addServiceButton"):
                 services_page.addServiceButton.clicked.connect(self._on_add_service_clicked)
+            if hasattr(services_page, "searchEdit"):
+                services_page.searchEdit.textChanged.connect(
+                    lambda text: self._reload_services(text)
+                )
+
+        products_page = self._pages.get("products")
+        if products_page:
+            table: QTableWidget = products_page.productsTable
+            self._setup_table(table)
+            if hasattr(products_page, "addProductButton"):
+                products_page.addProductButton.clicked.connect(self._on_add_product_clicked)
+            if hasattr(products_page, "categoryFilterCombo"):
+                combo = products_page.categoryFilterCombo
+                combo.clear()
+                combo.addItem("Tất cả loại", "")
+                combo.addItem("Đồ ăn", "DO_AN")
+                combo.addItem("Phụ kiện", "PHU_KIEN")
+                combo.currentIndexChanged.connect(lambda _: self._reload_products())
+            if hasattr(products_page, "searchEdit"):
+                products_page.searchEdit.textChanged.connect(
+                    lambda text: self._reload_products(text)
+                )
 
         pets_page = self._pages.get("pets")
         if pets_page:
@@ -537,15 +570,38 @@ class PetCareApp(QMainWindow):
         if inv_page:
             if hasattr(inv_page, "createInvoiceButton"):
                 inv_page.createInvoiceButton.clicked.connect(self._show_invoice_center)
+            if hasattr(inv_page, "createRetailButton"):
+                inv_page.createRetailButton.clicked.connect(self._show_retail_pos_dialog)
+            if hasattr(inv_page, "typeFilterCombo"):
+                combo = inv_page.typeFilterCombo
+                combo.clear()
+                combo.addItem("Tất cả hoá đơn", "")
+                combo.addItem("HĐ Dịch vụ", "SERVICE")
+                combo.addItem("HĐ Bán lẻ", "RETAIL")
+                combo.currentIndexChanged.connect(lambda _: self._reload_invoices_table())
+            if hasattr(inv_page, "searchEdit"):
+                inv_page.searchEdit.textChanged.connect(lambda _: self._reload_invoices_table())
             self._install_invoices_table(inv_page)
 
+        emp_page = self._pages.get("employees")
+        if emp_page:
+            table: QTableWidget = emp_page.employeesTable
+            self._setup_table(table)
+            if hasattr(emp_page, "searchEdit"):
+                emp_page.searchEdit.textChanged.connect(lambda _: self._render_employees_table())
+            if hasattr(emp_page, "addEmployeeButton"):
+                emp_page.addEmployeeButton.clicked.connect(self._on_add_employee_clicked)
+
     def _reload_catalog_data(self) -> None:
-        """Load khach hang/thu cung/dich vu tu MySQL va render UI."""
+        """Load khach hang/thu cung/dich vu/san pham tu MySQL va render UI."""
+        self._reload_employees()
         self._reload_customers(None)
         self._reload_services()
+        self._reload_products()
         self._reload_pets()
         self._refresh_pets_customer_filter()
         self._refresh_appointments_customer_combo()
+        self._refresh_appointments_employee_filter()
         self._reload_appointments_table()
         self._reload_invoices_table()
 
@@ -565,9 +621,18 @@ class PetCareApp(QMainWindow):
             return
         table = QTableWidget()
         table.setObjectName("invoicesTable")
-        table.setColumnCount(7)
+        table.setColumnCount(8)
         table.setHorizontalHeaderLabels(
-            ["Mã HĐ", "Ngày", "Khách hàng", "Thú cưng", "Tổng tiền", "Trạng thái", "Thao tác"]
+            [
+                "Mã HĐ",
+                "Loại",
+                "Ngày",
+                "Khách hàng",
+                "Người tạo",
+                "Tổng tiền",
+                "Trạng thái",
+                "Thao tác",
+            ]
         )
         self._setup_table(table)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -581,40 +646,66 @@ class PetCareApp(QMainWindow):
         inv_page = self._pages.get("invoices")
         if not inv_page or not hasattr(inv_page, "invoicesTable"):
             return
-        rows = invoice_service.list_recent(limit=150)
+
+        # Filter: type
+        invoice_type: str | None = None
+        if hasattr(inv_page, "typeFilterCombo"):
+            data = inv_page.typeFilterCombo.currentData()
+            if isinstance(data, str) and data:
+                invoice_type = data
+
+        # Filter: search local-side (theo invoice_no / customer_name)
+        rows = invoice_service.list_recent(limit=200, invoice_type=invoice_type)
+
+        if hasattr(inv_page, "searchEdit"):
+            q = (inv_page.searchEdit.text() or "").strip().lower()
+            if q:
+                rows = [
+                    r for r in rows
+                    if q in str(r.get("invoice_no") or "").lower()
+                    or q in str(r.get("customer_name") or "").lower()
+                ]
+
         self._invoice_rows = rows  # type: ignore[attr-defined]
 
         table: QTableWidget = inv_page.invoicesTable
         table.setRowCount(len(rows))
         for r, i in enumerate(rows):
             table.setItem(r, 0, QTableWidgetItem(str(i.get("invoice_no", ""))))
+            inv_type = str(i.get("invoice_type") or "SERVICE")
+            type_label = "Bán lẻ" if inv_type == "RETAIL" else "Dịch vụ"
+            type_item = QTableWidgetItem(type_label)
+            type_item.setForeground(QColor("#2563EB" if inv_type == "RETAIL" else "#0F766E"))
+            table.setItem(r, 1, type_item)
             issued = i.get("issued_at")
             issued_txt = issued.strftime("%d/%m/%Y %H:%M") if issued else ""
-            table.setItem(r, 1, QTableWidgetItem(issued_txt))
-            table.setItem(r, 2, QTableWidgetItem(str(i.get("customer_name", ""))))
-            table.setItem(r, 3, QTableWidgetItem(str(i.get("pet_name", ""))))
+            table.setItem(r, 2, QTableWidgetItem(issued_txt))
+            table.setItem(r, 3, QTableWidgetItem(str(i.get("customer_name") or "(khách lẻ)")))
+            creator = i.get("created_by_name") or ""
+            table.setItem(r, 4, QTableWidgetItem(str(creator)))
             total = float(i.get("total_amount") or 0)
-            table.setItem(r, 4, QTableWidgetItem(f"{int(total):,}đ".replace(",", ".")))
+            table.setItem(r, 5, QTableWidgetItem(f"{int(total):,}đ".replace(",", ".")))
             status = str(i.get("payment_status", "CHUA_TT"))
             status_label = "Đã TT" if status == "DA_TT" else ("Chưa TT" if status == "CHUA_TT" else status)
-            table.setItem(r, 5, QTableWidgetItem(status_label))
+            table.setItem(r, 6, QTableWidgetItem(status_label))
 
             invoice_id = int(i["invoice_id"])
             table.setCellWidget(
                 r,
-                6,
+                7,
                 self._make_invoice_actions(invoice_id=invoice_id),
             )
 
         hdr = table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
-        table.setColumnWidth(6, 260)
+        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
+        table.setColumnWidth(7, 260)
 
     def _make_invoice_actions(self, *, invoice_id: int) -> QWidget:
         btn_view = _build_action_icon_button(
@@ -713,20 +804,223 @@ class PetCareApp(QMainWindow):
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._reload_invoices_table()
 
-    def _show_invoice_detail(self, invoice_id: int) -> None:
-        from src.petcare_backend.dao import invoice_item_dao
-        from src.petcare_backend.invoice_export import export_invoice_pdf, ExportError
+    def _show_retail_pos_dialog(self) -> None:
+        """Dialog tao hoa don ban le (POS): chon SP + so luong, tinh tong, tao."""
+        try:
+            products = list(product_service.list_products(active_only=True))
+        except Exception as exc:
+            QMessageBox.warning(self, "Bán lẻ", f"Không tải được sản phẩm: {exc}")
+            return
+        if not products:
+            QMessageBox.information(
+                self, "Bán lẻ", "Chưa có sản phẩm nào. Hãy thêm sản phẩm trước."
+            )
+            return
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Chi tiết hoá đơn #{invoice_id}")
-        dlg.resize(760, 520)
+        dlg.setWindowTitle("Tạo hoá đơn bán lẻ (POS)")
+        dlg.resize(820, 580)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        root = QVBoxLayout(dlg)
+        root.setSpacing(12)
+
+        title = QLabel("Bán đồ ăn / phụ kiện cho khách hàng")
+        title.setStyleSheet("font: 800 12pt 'Segoe UI'; color:#0F172A;")
+        root.addWidget(title)
+
+        # KH (tuy chon - khach vang lai)
+        cust_row = QHBoxLayout()
+        cust_lbl = QLabel("Khách hàng (tuỳ chọn)")
+        cust_lbl.setStyleSheet("color: rgba(15,23,42,0.65); font: 700 9pt 'Segoe UI';")
+        cust_row.addWidget(cust_lbl)
+        cust_combo = QComboBox()
+        cust_combo.addItem("— Khách vãng lai —", 0)
+        for c in self._customers:
+            cust_combo.addItem(f"{c.full_name} ({c.phone})", int(c.id))
+        cust_row.addWidget(cust_combo, 1)
+        root.addLayout(cust_row)
+
+        # Form them dong
+        add_row = QHBoxLayout()
+        add_row.setSpacing(8)
+        prod_combo = QComboBox()
+        prod_combo.setMinimumWidth(380)
+        for p in products:
+            prod_combo.addItem(
+                f"{p.name} — {int(p.price):,}đ (kho: {p.stock})".replace(",", "."),
+                int(p.id),
+            )
+        qty_spin = QSpinBox()
+        qty_spin.setRange(1, 100)
+        qty_spin.setValue(1)
+        btn_add = QPushButton("＋ Thêm")
+        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_add.setStyleSheet(
+            "QPushButton{background:#DCFCE7;color:#166534;border:none;padding:6px 14px;border-radius:8px;font:800 9pt 'Segoe UI';}"
+            "QPushButton:hover{background:#BBF7D0;}"
+        )
+        add_row.addWidget(prod_combo, 1)
+        add_row.addWidget(qty_spin)
+        add_row.addWidget(btn_add)
+        root.addLayout(add_row)
+
+        # Bang gio hang
+        cart_table = QTableWidget()
+        cart_table.setColumnCount(6)
+        cart_table.setHorizontalHeaderLabels(
+            ["Tên sản phẩm", "Loại", "SL", "Đơn giá", "Thành tiền", ""]
+        )
+        self._setup_table(cart_table)
+        cart_table.setMinimumHeight(220)
+        root.addWidget(cart_table, 1)
+
+        # Tom tat tong
+        total_lbl = QLabel("Tổng: 0đ")
+        total_lbl.setStyleSheet("font: 900 12pt 'Segoe UI'; color:#0F172A;")
+        total_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        root.addWidget(total_lbl)
+
+        cart: list[dict] = []  # {pid, name, category, qty, price}
+
+        def _recompute() -> None:
+            cart_table.setRowCount(len(cart))
+            total = 0
+            for r, line in enumerate(cart):
+                cart_table.setItem(r, 0, QTableWidgetItem(line["name"]))
+                cat_label = product_service.CATEGORY_LABELS.get(line["category"], line["category"])
+                cart_table.setItem(r, 1, QTableWidgetItem(cat_label))
+                cart_table.setItem(r, 2, QTableWidgetItem(str(line["qty"])))
+                cart_table.setItem(r, 3, QTableWidgetItem(f"{int(line['price']):,}đ".replace(",", ".")))
+                line_total = int(line["price"]) * int(line["qty"])
+                total += line_total
+                cart_table.setItem(r, 4, QTableWidgetItem(f"{line_total:,}đ".replace(",", ".")))
+
+                btn_del = _build_action_icon_button(
+                    _action_icon("trash", "#B91C1C"),
+                    "Xoá",
+                    "#FEE2E2",
+                    "#B91C1C",
+                    hover="#FCA5A5",
+                    hover_fg="#7F1D1D",
+                )
+                btn_del.clicked.connect(lambda _, idx=r: _remove_line(idx))
+                cart_table.setCellWidget(r, 5, _wrap_action_buttons([btn_del]))
+            total_lbl.setText(f"Tổng: {total:,}đ".replace(",", "."))
+
+            hdr2 = cart_table.horizontalHeader()
+            hdr2.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            hdr2.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            hdr2.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            hdr2.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+            hdr2.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+            hdr2.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+
+        def _remove_line(idx: int) -> None:
+            if 0 <= idx < len(cart):
+                cart.pop(idx)
+                _recompute()
+
+        def _on_add() -> None:
+            pid = prod_combo.currentData()
+            if not isinstance(pid, int):
+                return
+            p = next((x for x in products if x.id == pid), None)
+            if p is None:
+                return
+            qty = int(qty_spin.value())
+            existing = next((c for c in cart if c["pid"] == pid), None)
+            new_total = (existing["qty"] if existing else 0) + qty
+            if new_total > p.stock:
+                QMessageBox.warning(
+                    dlg,
+                    "Tồn kho",
+                    f"Sản phẩm '{p.name}' chỉ còn {p.stock} trong kho.",
+                )
+                return
+            if existing:
+                existing["qty"] = new_total
+            else:
+                cart.append(
+                    {
+                        "pid": pid,
+                        "name": p.name,
+                        "category": p.category,
+                        "qty": qty,
+                        "price": int(p.price),
+                    }
+                )
+            qty_spin.setValue(1)
+            _recompute()
+
+        btn_add.clicked.connect(_on_add)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Tạo hoá đơn")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            if not cart:
+                QMessageBox.warning(dlg, "Bán lẻ", "Vui lòng chọn ít nhất một sản phẩm.")
+                return
+            cust_id = cust_combo.currentData()
+            cust_id_val = int(cust_id) if isinstance(cust_id, int) and cust_id > 0 else None
+            try:
+                inv_id = invoice_service.create_retail_invoice(
+                    customer_id=cust_id_val,
+                    items=[(int(c["pid"]), int(c["qty"])) for c in cart],
+                )
+            except invoice_service.InvoiceError as exc:
+                QMessageBox.warning(dlg, "Bán lẻ", str(exc))
+                return
+            QMessageBox.information(dlg, "Bán lẻ", f"Đã tạo hoá đơn bán lẻ #{inv_id}.")
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        root.addWidget(buttons)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._reload_invoices_table()
+            self._reload_products()
+
+    def _show_invoice_detail(self, invoice_id: int) -> None:
+        from src.petcare_backend.dao import invoice_dao, invoice_item_dao
+        from src.petcare_backend.invoice_export import export_invoice_pdf, ExportError
+
+        inv = invoice_dao.get_by_id(invoice_id)
+        if inv is None:
+            QMessageBox.warning(self, "Hoá đơn", "Hoá đơn không tồn tại.")
+            return
+
+        is_retail = str(inv.get("invoice_type") or "SERVICE") == "RETAIL"
+        is_paid = str(inv.get("payment_status") or "") == "DA_TT"
+
+        dlg = QDialog(self)
+        title_kind = "bán lẻ" if is_retail else "dịch vụ"
+        dlg.setWindowTitle(f"Chi tiết hoá đơn {title_kind} #{invoice_id}")
+        dlg.resize(820, 580)
         self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
 
         root = QVBoxLayout(dlg)
         root.setSpacing(10)
 
-        items = invoice_item_dao.list_by_invoice(invoice_id)
+        # Top bar: them san pham + xuat PDF
         top_bar = QHBoxLayout()
+        if not is_paid:
+            btn_add_prod = QPushButton("＋  Thêm sản phẩm")
+            btn_add_prod.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_add_prod.setStyleSheet(
+                "QPushButton{background:#DCFCE7;color:#166534;border:none;padding:6px 12px;border-radius:8px;font:800 9pt 'Segoe UI';}"
+                "QPushButton:hover{background:#BBF7D0;}"
+            )
+            top_bar.addWidget(btn_add_prod)
+        else:
+            btn_add_prod = None
         top_bar.addStretch(1)
         btn_export = QPushButton("Xuất PDF")
         btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -738,23 +1032,68 @@ class PetCareApp(QMainWindow):
         root.addLayout(top_bar)
 
         table = QTableWidget()
-        table.setColumnCount(5)
-        table.setHorizontalHeaderLabels(["Thú cưng", "Dịch vụ", "SL", "Đơn giá", "Thành tiền"])
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(
+            ["Loại", "Thú cưng", "Tên dịch vụ / sản phẩm", "SL", "Đơn giá", "Thành tiền", ""]
+        )
         self._setup_table(table)
-        table.setRowCount(len(items))
-        for r, it in enumerate(items):
-            table.setItem(r, 0, QTableWidgetItem(str(it.get("pet_name") or "—")))
-            table.setItem(r, 1, QTableWidgetItem(str(it.get("service_name", ""))))
-            table.setItem(r, 2, QTableWidgetItem(str(it.get("quantity", ""))))
-            table.setItem(r, 3, QTableWidgetItem(f"{int(float(it.get('unit_price') or 0)):,}đ".replace(",", ".")))
-            table.setItem(r, 4, QTableWidgetItem(f"{int(float(it.get('line_total') or 0)):,}đ".replace(",", ".")))
+        root.addWidget(table, 1)
+
+        # Tom tat
+        summary = QLabel("")
+        summary.setStyleSheet("font:700 10pt 'Segoe UI'; color:#0F172A;")
+        root.addWidget(summary)
+
+        def _refresh() -> None:
+            items = invoice_item_dao.list_by_invoice(invoice_id)
+            table.setRowCount(len(items))
+            for r, it in enumerate(items):
+                t = str(it.get("item_type") or "SERVICE")
+                t_label = "Sản phẩm" if t == "PRODUCT" else "Dịch vụ"
+                t_item = QTableWidgetItem(t_label)
+                t_item.setForeground(QColor("#2563EB" if t == "PRODUCT" else "#0F766E"))
+                table.setItem(r, 0, t_item)
+                table.setItem(r, 1, QTableWidgetItem(str(it.get("pet_name") or "—")))
+                name_txt = str(it.get("item_name") or it.get("service_name") or it.get("product_name") or "")
+                table.setItem(r, 2, QTableWidgetItem(name_txt))
+                table.setItem(r, 3, QTableWidgetItem(str(it.get("quantity", ""))))
+                table.setItem(r, 4, QTableWidgetItem(f"{int(float(it.get('unit_price') or 0)):,}đ".replace(",", ".")))
+                table.setItem(r, 5, QTableWidgetItem(f"{int(float(it.get('line_total') or 0)):,}đ".replace(",", ".")))
+
+                if not is_paid and t == "PRODUCT":
+                    btn_del = _build_action_icon_button(
+                        _action_icon("trash", "#B91C1C"),
+                        "Xoá",
+                        "#FEE2E2",
+                        "#B91C1C",
+                        hover="#FCA5A5",
+                        hover_fg="#7F1D1D",
+                    )
+                    btn_del.clicked.connect(
+                        lambda _, iid=int(it["id"]): self._remove_invoice_product(iid, dlg, _refresh)
+                    )
+                    table.setCellWidget(r, 6, _wrap_action_buttons([btn_del]))
+                else:
+                    table.setCellWidget(r, 6, QWidget())
+            inv_now = invoice_dao.get_by_id(invoice_id)
+            if inv_now:
+                summary.setText(
+                    f"Tạm tính: {int(float(inv_now.get('subtotal_amount') or 0)):,}đ"
+                    f"  •  Giảm giá: {int(float(inv_now.get('discount_amount') or 0)):,}đ"
+                    f"  •  Thuế: {int(float(inv_now.get('tax_amount') or 0)):,}đ"
+                    f"  •  Tổng: {int(float(inv_now.get('total_amount') or 0)):,}đ"
+                    .replace(",", ".")
+                )
+
         hdr = table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        root.addWidget(table, 1)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        _refresh()
 
         def _on_export() -> None:
             default_name = f"invoice_{invoice_id}.pdf"
@@ -772,12 +1111,85 @@ class PetCareApp(QMainWindow):
             QMessageBox.information(dlg, "Xuất PDF", f"Đã xuất PDF:\n{path}")
 
         btn_export.clicked.connect(_on_export)
+        if btn_add_prod is not None:
+            btn_add_prod.clicked.connect(
+                lambda: self._add_product_to_invoice_dialog(invoice_id, dlg, _refresh)
+            )
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dlg.reject)
         buttons.accepted.connect(dlg.accept)
         root.addWidget(buttons)
         dlg.exec()
+        # Reload bang chinh sau khi dong dialog (du lieu co the doi)
+        self._reload_invoices_table()
+        self._reload_products()
+
+    def _remove_invoice_product(self, item_id: int, parent: QWidget, on_done) -> None:
+        confirm = QMessageBox.question(parent, "Xoá sản phẩm", "Xoá sản phẩm khỏi hoá đơn? (số tồn kho sẽ được hoàn lại)")
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            invoice_service.remove_invoice_item(item_id)
+        except invoice_service.InvoiceError as exc:
+            QMessageBox.warning(parent, "Xoá sản phẩm", str(exc))
+            return
+        on_done()
+
+    def _add_product_to_invoice_dialog(self, invoice_id: int, parent: QWidget, on_done) -> None:
+        try:
+            products = list(product_service.list_products(active_only=True))
+        except Exception as exc:
+            QMessageBox.warning(parent, "Sản phẩm", f"Không tải được sản phẩm: {exc}")
+            return
+        if not products:
+            QMessageBox.information(parent, "Sản phẩm", "Chưa có sản phẩm nào.")
+            return
+
+        dlg = QDialog(parent)
+        dlg.setWindowTitle("Thêm sản phẩm vào hoá đơn")
+        dlg.setMinimumWidth(520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        prod_combo = QComboBox()
+        for p in products:
+            prod_combo.addItem(
+                f"{p.name} — {int(p.price):,}đ (kho: {p.stock})".replace(",", "."),
+                int(p.id),
+            )
+        qty = QSpinBox()
+        qty.setRange(1, 100)
+        qty.setValue(1)
+        form.addRow("Sản phẩm *", prod_combo)
+        form.addRow("Số lượng *", qty)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Thêm")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            pid = prod_combo.currentData()
+            if not isinstance(pid, int):
+                return
+            try:
+                invoice_service.add_product_to_invoice(invoice_id, pid, int(qty.value()))
+            except invoice_service.InvoiceError as exc:
+                QMessageBox.warning(dlg, "Thêm sản phẩm", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            on_done()
 
     def _show_payment_dialog(self, invoice_id: int) -> None:
         from decimal import Decimal
@@ -1089,7 +1501,29 @@ class PetCareApp(QMainWindow):
         self._sync_appointment_detail_if_current_row(row)
 
     def _reload_appointments_table(self) -> None:
-        self._appointments_rows = appointment_service.list_recent(limit=150)  # type: ignore[attr-defined]
+        ap_page = self._pages.get("appointments")
+        employee_id: int | None = None
+        only_unassigned = False
+        if ap_page and hasattr(ap_page, "employeeFilterCombo"):
+            data = ap_page.employeeFilterCombo.currentData()
+            if isinstance(data, int):
+                employee_id = data
+            elif data == "NONE":
+                only_unassigned = True
+
+        # Employee tu dong bi rang buoc xem cua minh (xem _refresh_appointments_employee_filter)
+        if not getattr(self, "_is_admin", False):
+            current = Session.current()
+            if current is not None:
+                employee_id = int(current.id)
+            only_unassigned = False
+
+        if only_unassigned:
+            self._appointments_rows = appointment_service.list_unassigned(limit=150)  # type: ignore[attr-defined]
+        else:
+            self._appointments_rows = appointment_service.list_recent(  # type: ignore[attr-defined]
+                limit=150, employee_id=employee_id
+            )
         self._render_appointments_table_db()
 
     def _render_appointments_table_db(self) -> None:
@@ -1107,13 +1541,21 @@ class PetCareApp(QMainWindow):
             table.setItem(r, 1, QTableWidgetItem(str(a.get("customer_name", ""))))
             table.setItem(r, 2, QTableWidgetItem(str(a.get("pet_name", ""))))
             table.setItem(r, 3, QTableWidgetItem(str(a.get("service_name", ""))))
+
+            emp_name = a.get("employee_name")
+            emp_text = str(emp_name) if emp_name else "— Chưa phân công"
+            emp_item = QTableWidgetItem(emp_text)
+            if not emp_name:
+                emp_item.setForeground(QColor("#94A3B8"))
+            table.setItem(r, 4, emp_item)
+
             status_item = QTableWidgetItem(str(a.get("status_label") or ""))
             status_item.setData(Qt.ItemDataRole.UserRole, appt_id)
-            table.setItem(r, 4, status_item)
+            table.setItem(r, 5, status_item)
 
             res_item = QTableWidgetItem(str(a.get("note") or ""))
             res_item.setData(Qt.ItemDataRole.UserRole, appt_id)
-            table.setItem(r, 5, res_item)
+            table.setItem(r, 6, res_item)
 
         table.blockSignals(False)
 
@@ -1124,7 +1566,8 @@ class PetCareApp(QMainWindow):
         hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
 
         # ensure table is read-only
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -1193,12 +1636,45 @@ class PetCareApp(QMainWindow):
         status_row.addWidget(status_combo, 1)
         root.addLayout(status_row)
 
+        # Phan cong nhan vien (chi Admin moi enable)
+        is_admin = bool(getattr(self, "_is_admin", False))
+        emp_row = QHBoxLayout()
+        emp_lbl = QLabel("Nhân viên phụ trách")
+        emp_lbl.setStyleSheet("color: rgba(15,23,42,0.65); font: 700 9pt 'Segoe UI';")
+        emp_row.addWidget(emp_lbl)
+        emp_combo = QComboBox()
+        emp_combo.addItem("— Chưa phân công —", 0)
+        for u in self._employees_list:
+            emp_combo.addItem(f"{u.full_name} ({u.username})", int(u.id))
+        current_emp = a.get("employee_id")
+        if current_emp:
+            cur_idx = emp_combo.findData(int(current_emp))
+            if cur_idx < 0:
+                emp_name = a.get("employee_name") or f"User #{current_emp}"
+                emp_combo.addItem(str(emp_name), int(current_emp))
+                cur_idx = emp_combo.findData(int(current_emp))
+            emp_combo.setCurrentIndex(cur_idx)
+        emp_combo.setEnabled(is_admin)
+        emp_row.addWidget(emp_combo, 1)
+        root.addLayout(emp_row)
+
+        if not is_admin:
+            current_user = Session.current()
+            if current_user is not None and current_emp and int(current_emp) != int(current_user.id):
+                # Khoa form khi nhan vien khong phai nguoi phu trach
+                status_combo.setEnabled(False)
+                hint = QLabel("Bạn không phải nhân viên phụ trách lịch hẹn này, không được sửa.")
+                hint.setStyleSheet("color:#B91C1C; font:700 9pt 'Segoe UI';")
+                hint.setWordWrap(True)
+                root.addWidget(hint)
+
         info_lines = [
             f"Mã lịch hẹn: {a.get('appointment_id','')}",
             f"Thời gian: {self._fmt_dt_safe(a.get('scheduled_at'))}",
             f"Khách hàng: {a.get('customer_name','')}",
             f"SĐT: {a.get('customer_phone','—')}",
             f"Địa chỉ: {a.get('customer_address','—')}",
+            f"Nhân viên: {a.get('employee_name') or '— Chưa phân công'}",
         ]
         info_text = QPlainTextEdit()
         info_text.setReadOnly(True)
@@ -1258,6 +1734,11 @@ class PetCareApp(QMainWindow):
                 QMessageBox.warning(dlg, "Lưu", "ID lịch hẹn không hợp lệ.")
                 return
             try:
+                if is_admin:
+                    new_emp = emp_combo.currentData()
+                    new_emp_id = int(new_emp) if isinstance(new_emp, int) and new_emp > 0 else None
+                    if new_emp_id != (int(current_emp) if current_emp else None):
+                        appointment_service.assign_employee(appt_id, new_emp_id)
                 appointment_service.update_status(appt_id, status_combo.currentText())
                 appointment_service.update_result_note(appt_id, result_edit.toPlainText())
             except Exception as exc:
@@ -1621,8 +2102,25 @@ class PetCareApp(QMainWindow):
         self._refresh_pets_customer_filter()
         self._refresh_appointments_customer_combo()
 
-    def _reload_services(self) -> None:
-        self._services_list = list(service_service.list_services(active_only=True))
+    def _reload_services(self, query: str | None = None) -> None:
+        q = (query or "").strip() or None
+        services_page = self._pages.get("services")
+        # Trang dich vu: ho tro tim kiem
+        if q is None and services_page and hasattr(services_page, "searchEdit"):
+            q = (services_page.searchEdit.text() or "").strip() or None
+        # Cho dropdown trong dat lich, luon load tat ca dich vu hoat dong
+        all_active = list(service_service.list_services(active_only=True))
+        if q:
+            ql = q.lower()
+            visible = [
+                s for s in all_active
+                if ql in (s.name or "").lower()
+                or ql in (s.description or "").lower()
+            ]
+        else:
+            visible = all_active
+        self._services_list = all_active
+        self._services_visible = visible  # dung de render bang
         self._render_services_table()
         self._refresh_appointment_services_combo()
 
@@ -1672,13 +2170,638 @@ class PetCareApp(QMainWindow):
         hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         table.setColumnWidth(4, 220)
 
+    # ===================== PRODUCTS (do an / phu kien) =====================
+
+    def _reload_employees(self) -> None:
+        try:
+            self._employees_list = list(user_service.list_employees(active_only=True))
+        except Exception:
+            self._employees_list = []
+
+    # ======= Trang quan ly nhan vien + thong ke doanh so =======================
+
+    def _reload_employees_stats(self) -> None:
+        """Tai bao cao quan ly nhan vien (toan thoi gian) + render bang.
+
+        Doanh so theo khoang thoi gian da chuyen sang Dashboard.
+        """
+        if not Session.is_admin():
+            self._employees_stats = []
+            self._render_employees_table()
+            return
+        try:
+            report = report_service.employee_performance_stats()
+        except Exception as exc:
+            QMessageBox.warning(self, "Nhân viên", f"Không tải được danh sách nhân viên: {exc}")
+            self._employees_stats = []
+            self._render_employees_table()
+            return
+
+        self._employees_stats = list(report.employees)
+        self._render_employees_table()
+
+    def _render_employees_table(self) -> None:
+        emp_page = self._pages.get("employees")
+        if not emp_page or not hasattr(emp_page, "employeesTable"):
+            return
+        table: QTableWidget = emp_page.employeesTable
+
+        keyword = ""
+        if hasattr(emp_page, "searchEdit"):
+            keyword = (emp_page.searchEdit.text() or "").strip().lower()
+
+        rows = self._employees_stats
+        if keyword:
+            def _match(e) -> bool:
+                blob = " ".join([
+                    (e.full_name or ""),
+                    (e.username or ""),
+                    (e.phone or ""),
+                ]).lower()
+                return keyword in blob
+            rows = [e for e in rows if _match(e)]
+
+        table.setRowCount(len(rows))
+        for r, e in enumerate(rows):
+            table.setItem(r, 0, QTableWidgetItem(e.full_name))
+            table.setItem(r, 1, QTableWidgetItem(e.username))
+            table.setItem(r, 2, QTableWidgetItem(e.phone or ""))
+            status_item = QTableWidgetItem(
+                "Đang làm" if e.is_active else "Đã khoá"
+            )
+            status_item.setForeground(
+                QColor("#15803D") if e.is_active else QColor("#B91C1C")
+            )
+            table.setItem(r, 3, status_item)
+            table.setItem(r, 4, QTableWidgetItem(str(e.appointment_count)))
+            done_item = QTableWidgetItem(
+                f"{e.appointment_done}/{e.appointment_count}"
+            )
+            table.setItem(r, 5, done_item)
+            table.setCellWidget(
+                r,
+                6,
+                self._make_employee_row_actions(e),
+            )
+
+        hdr = table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+        table.setColumnWidth(6, 320)
+
+    def _make_employee_row_actions(self, emp) -> QWidget:
+        """Tao cum nut hanh dong cho 1 nhan vien."""
+        wrap = QWidget()
+        h = QHBoxLayout(wrap)
+        h.setContentsMargins(4, 2, 4, 2)
+        h.setSpacing(6)
+
+        btn_detail = QPushButton("Chi tiết")
+        btn_detail.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_detail.clicked.connect(lambda _=False, eid=emp.employee_id: self._show_employee_detail_dialog(eid))
+        h.addWidget(btn_detail)
+
+        btn_edit = QPushButton("Sửa")
+        btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_edit.clicked.connect(lambda _=False, eid=emp.employee_id: self._on_edit_employee_clicked(eid))
+        h.addWidget(btn_edit)
+
+        btn_pw = QPushButton("Reset MK")
+        btn_pw.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_pw.clicked.connect(lambda _=False, eid=emp.employee_id: self._on_reset_employee_password(eid))
+        h.addWidget(btn_pw)
+
+        btn_lock = QPushButton("Khoá" if emp.is_active else "Mở khoá")
+        btn_lock.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_lock.clicked.connect(
+            lambda _=False, eid=emp.employee_id, active=emp.is_active:
+            self._on_toggle_employee_active(eid, active)
+        )
+        h.addWidget(btn_lock)
+
+        h.addStretch(1)
+        return wrap
+
+    def _on_add_employee_clicked(self) -> None:
+        if not Session.is_admin():
+            QMessageBox.warning(self, "Thêm nhân viên", "Chỉ Admin mới được thực hiện.")
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Thêm nhân viên")
+        dlg.setMinimumWidth(520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        username = QLineEdit()
+        full_name = QLineEdit()
+        phone = QLineEdit()
+        pw = QLineEdit()
+        pw.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("Username *", username)
+        form.addRow("Họ tên *", full_name)
+        form.addRow("SĐT", phone)
+        form.addRow("Mật khẩu *", pw)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Thêm")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                user_service.admin_create_user(
+                    role_name="EMPLOYEE",
+                    username=username.text(),
+                    password=pw.text(),
+                    full_name=full_name.text(),
+                    phone=phone.text(),
+                )
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Thêm nhân viên", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._reload_employees()
+            self._reload_employees_stats()
+
+    def _on_edit_employee_clicked(self, user_id: int) -> None:
+        if not Session.is_admin():
+            return
+        try:
+            users = user_service.list_users(active_only=False)
+        except Exception as exc:
+            QMessageBox.warning(self, "Sửa nhân viên", str(exc))
+            return
+        u = next((x for x in users if int(x["id"]) == int(user_id)), None)
+        if u is None:
+            QMessageBox.warning(self, "Sửa nhân viên", "Không tìm thấy nhân viên.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Sửa nhân viên #{user_id}")
+        dlg.setMinimumWidth(520)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        full_name = QLineEdit(u["full_name"])
+        phone = QLineEdit(u.get("phone") or "")
+        form.addRow("Họ tên *", full_name)
+        form.addRow("SĐT", phone)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Lưu")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                user_service.admin_update_user(int(user_id), full_name.text(), phone.text())
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Sửa nhân viên", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._reload_employees()
+            self._reload_employees_stats()
+
+    def _on_reset_employee_password(self, user_id: int) -> None:
+        if not Session.is_admin():
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Reset mật khẩu #{user_id}")
+        dlg.setMinimumWidth(420)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        pw = QLineEdit()
+        pw.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("Mật khẩu mới *", pw)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Lưu")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                user_service.admin_reset_password(int(user_id), pw.text())
+            except user_service.UserError as exc:
+                QMessageBox.warning(dlg, "Reset mật khẩu", str(exc))
+                return
+            QMessageBox.information(dlg, "Reset mật khẩu", "Đã cập nhật mật khẩu.")
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+        dlg.exec()
+
+    def _on_toggle_employee_active(self, user_id: int, currently_active: bool) -> None:
+        if not Session.is_admin():
+            return
+        action = "khoá" if currently_active else "mở khoá"
+        confirm = QMessageBox.question(
+            self,
+            f"{action.capitalize()} nhân viên",
+            f"Bạn có chắc muốn {action} nhân viên #{user_id}?",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            user_service.admin_set_active(int(user_id), not currently_active)
+        except user_service.UserError as exc:
+            QMessageBox.warning(self, f"{action.capitalize()} nhân viên", str(exc))
+            return
+        self._reload_employees()
+        self._reload_employees_stats()
+
+    def _show_employee_detail_dialog(self, employee_id: int) -> None:
+        emp = next(
+            (e for e in self._employees_stats if int(e.employee_id) == int(employee_id)),
+            None,
+        )
+        if emp is None:
+            QMessageBox.warning(self, "Chi tiết nhân viên", "Không tìm thấy nhân viên.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Nhân viên: {emp.full_name}")
+        dlg.resize(900, 600)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        root = QVBoxLayout(dlg)
+        root.setSpacing(10)
+
+        title = QLabel(f"{emp.full_name} (@{emp.username})")
+        title.setStyleSheet("font: 900 14pt 'Segoe UI'; color: #0F172A;")
+        root.addWidget(title)
+
+        info = QLabel(
+            f"SĐT: {emp.phone or '—'}  |  "
+            f"Trạng thái: {'Đang làm' if emp.is_active else 'Đã khoá'}"
+        )
+        info.setStyleSheet("color:#475569;")
+        root.addWidget(info)
+
+        # KPIs
+        kpi = QGridLayout()
+        kpi.setSpacing(10)
+
+        def _add_kpi(row: int, col: int, label: str, value: str) -> None:
+            box = QFrame()
+            box.setStyleSheet(
+                "QFrame{background: rgba(255,255,255,0.92); border:1px solid #D6E2F7; border-radius:12px;}"
+            )
+            lay = QVBoxLayout(box)
+            lay.setContentsMargins(12, 10, 12, 10)
+            t = QLabel(label)
+            t.setStyleSheet("color:#5B6A87; font-weight:600; font-size:11px;")
+            v = QLabel(value)
+            v.setStyleSheet("color:#0F172A; font-weight:800; font-size:16px;")
+            lay.addWidget(t)
+            lay.addWidget(v)
+            kpi.addWidget(box, row, col)
+
+        _add_kpi(0, 0, "LỊCH HẸN", str(emp.appointment_count))
+        _add_kpi(0, 1, "HOÀN THÀNH", str(emp.appointment_done))
+        _add_kpi(0, 2, "ĐANG XỬ LÝ", str(emp.appointment_in_progress))
+        _add_kpi(0, 3, "CHỜ XỬ LÝ", str(emp.appointment_pending))
+        _add_kpi(1, 0, "HĐ DỊCH VỤ", report_service.format_vnd(emp.service_revenue))
+        _add_kpi(1, 1, "HĐ BÁN LẺ", report_service.format_vnd(emp.retail_revenue))
+        _add_kpi(1, 2, "TỔNG DOANH THU", report_service.format_vnd(emp.total_revenue))
+        _add_kpi(1, 3, "TỔNG HĐ", str(emp.invoice_count))
+        root.addLayout(kpi)
+
+        # Lich hen + hoa don gan day
+        lists_row = QHBoxLayout()
+        lists_row.setSpacing(12)
+
+        # Cot 1: Lich hen
+        appts_box = QFrame()
+        appts_box.setStyleSheet(
+            "QFrame{background: rgba(255,255,255,0.92); border:1px solid #D6E2F7; border-radius:12px;}"
+        )
+        appts_lay = QVBoxLayout(appts_box)
+        appts_lay.setContentsMargins(12, 12, 12, 12)
+        appts_title = QLabel("Lịch hẹn gần đây")
+        appts_title.setStyleSheet("font:700 11pt 'Segoe UI';")
+        appts_lay.addWidget(appts_title)
+        appts_table = QTableWidget(0, 4)
+        appts_table.setHorizontalHeaderLabels(["Thời gian", "Khách", "Dịch vụ", "TT"])
+        appts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        appts_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        appts_table.verticalHeader().setVisible(False)
+        try:
+            appts_rows = report_service.employee_recent_appointments(employee_id, 30)
+        except Exception:
+            appts_rows = []
+        status_map = {
+            "CHO_XU_LY": "Chờ xử lý",
+            "DANG_THUC_HIEN": "Đang thực hiện",
+            "HOAN_THANH": "Hoàn thành",
+            "HUY": "Huỷ",
+        }
+        appts_table.setRowCount(len(appts_rows))
+        for r, row in enumerate(appts_rows):
+            sched = row.get("scheduled_at")
+            sched_str = sched.strftime("%d/%m/%Y %H:%M") if sched else ""
+            appts_table.setItem(r, 0, QTableWidgetItem(sched_str))
+            appts_table.setItem(r, 1, QTableWidgetItem(row.get("customer_name") or ""))
+            appts_table.setItem(r, 2, QTableWidgetItem(row.get("service_name") or ""))
+            appts_table.setItem(
+                r, 3, QTableWidgetItem(status_map.get(row.get("status") or "", row.get("status") or ""))
+            )
+        appts_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        appts_lay.addWidget(appts_table)
+        lists_row.addWidget(appts_box, 1)
+
+        # Cot 2: Hoa don
+        inv_box = QFrame()
+        inv_box.setStyleSheet(
+            "QFrame{background: rgba(255,255,255,0.92); border:1px solid #D6E2F7; border-radius:12px;}"
+        )
+        inv_lay = QVBoxLayout(inv_box)
+        inv_lay.setContentsMargins(12, 12, 12, 12)
+        inv_title = QLabel("Hoá đơn gần đây")
+        inv_title.setStyleSheet("font:700 11pt 'Segoe UI';")
+        inv_lay.addWidget(inv_title)
+        inv_table = QTableWidget(0, 5)
+        inv_table.setHorizontalHeaderLabels(["Số HĐ", "Ngày", "Loại", "Khách", "Tổng"])
+        inv_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        inv_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        inv_table.verticalHeader().setVisible(False)
+        try:
+            inv_rows = report_service.employee_recent_invoices(employee_id, 30)
+        except Exception:
+            inv_rows = []
+        inv_table.setRowCount(len(inv_rows))
+        for r, row in enumerate(inv_rows):
+            issued = row.get("issued_at")
+            issued_str = issued.strftime("%d/%m/%Y") if issued else ""
+            inv_type = "Bán lẻ" if (row.get("invoice_type") == "RETAIL") else "Dịch vụ"
+            inv_table.setItem(r, 0, QTableWidgetItem(row.get("invoice_no") or ""))
+            inv_table.setItem(r, 1, QTableWidgetItem(issued_str))
+            inv_table.setItem(r, 2, QTableWidgetItem(inv_type))
+            inv_table.setItem(r, 3, QTableWidgetItem(row.get("customer_name") or ""))
+            inv_table.setItem(
+                r, 4, QTableWidgetItem(report_service.format_vnd(row.get("total_amount")))
+            )
+        inv_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        inv_lay.addWidget(inv_table)
+        lists_row.addWidget(inv_box, 1)
+
+        root.addLayout(lists_row)
+
+        btn_close = QPushButton("Đóng")
+        btn_close.clicked.connect(dlg.accept)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        bottom = QHBoxLayout()
+        bottom.addStretch(1)
+        bottom.addWidget(btn_close)
+        root.addLayout(bottom)
+
+        dlg.exec()
+
+    def _reload_products(self, query: str | None = None) -> None:
+        products_page = self._pages.get("products")
+        q = (query or "").strip() or None
+        if q is None and products_page and hasattr(products_page, "searchEdit"):
+            q = (products_page.searchEdit.text() or "").strip() or None
+        category = ""
+        if products_page and hasattr(products_page, "categoryFilterCombo"):
+            data = products_page.categoryFilterCombo.currentData()
+            if isinstance(data, str):
+                category = data
+        try:
+            self._products_list = list(
+                product_service.list_products(
+                    active_only=True, query=q, category=category or None
+                )
+            )
+        except Exception:
+            self._products_list = []
+        self._render_products_table()
+
+    def _render_products_table(self) -> None:
+        products_page = self._pages.get("products")
+        if not products_page or not hasattr(products_page, "productsTable"):
+            return
+        table: QTableWidget = products_page.productsTable
+        rows = self._products_list
+        table.setRowCount(len(rows))
+        for r, p in enumerate(rows):
+            table.setItem(r, 0, QTableWidgetItem(p.name))
+            cat_label = product_service.CATEGORY_LABELS.get(p.category, p.category)
+            table.setItem(r, 1, QTableWidgetItem(cat_label))
+            table.setItem(r, 2, QTableWidgetItem(p.sku or ""))
+            table.setItem(r, 3, QTableWidgetItem(f"{int(p.price):,}đ".replace(",", ".")))
+            stock_item = QTableWidgetItem(str(p.stock))
+            if p.stock <= 0:
+                stock_item.setForeground(QColor("#B91C1C"))
+            elif p.stock < 5:
+                stock_item.setForeground(QColor("#B45309"))
+            table.setItem(r, 4, stock_item)
+            table.setItem(r, 5, QTableWidgetItem(p.description or ""))
+            table.setCellWidget(
+                r,
+                6,
+                self._make_row_actions(
+                    on_edit=lambda _, pid=p.id: self._on_edit_product_clicked(pid),
+                    on_delete=lambda _, pid=p.id: self._on_delete_product_clicked(pid),
+                    delete_text="Ẩn",
+                ),
+            )
+
+        hdr = table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+
+    def _on_add_product_clicked(self) -> None:
+        self._show_product_dialog(None)
+
+    def _on_edit_product_clicked(self, product_id: int) -> None:
+        self._show_product_dialog(product_id)
+
+    def _on_delete_product_clicked(self, product_id: int) -> None:
+        confirm = QMessageBox.question(
+            self,
+            "Ẩn sản phẩm",
+            f"Bạn muốn ẩn sản phẩm #{product_id}? (giữ lại lịch sử bán hàng)",
+        )
+        if confirm != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            product_service.deactivate_product(product_id)
+        except product_service.ProductError as exc:
+            QMessageBox.warning(self, "Ẩn sản phẩm", str(exc))
+            return
+        self._reload_products()
+
+    def _show_product_dialog(self, product_id: int | None) -> None:
+        existing = product_service.get_product(product_id) if product_id else None
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Thêm sản phẩm" if existing is None else f"Sửa sản phẩm #{existing.id}")
+        dlg.setMinimumWidth(560)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+        name_edit = QLineEdit("" if existing is None else existing.name)
+        category_combo = QComboBox()
+        category_combo.addItem("Đồ ăn", "DO_AN")
+        category_combo.addItem("Phụ kiện", "PHU_KIEN")
+        if existing is not None:
+            idx = category_combo.findData(existing.category)
+            if idx >= 0:
+                category_combo.setCurrentIndex(idx)
+        sku_edit = QLineEdit("" if existing is None else (existing.sku or ""))
+        price_edit = QLineEdit("" if existing is None else f"{int(existing.price)}")
+        stock_spin = QSpinBox()
+        stock_spin.setRange(0, 1_000_000)
+        stock_spin.setValue(0 if existing is None else int(existing.stock))
+        desc_edit = QLineEdit("" if existing is None else (existing.description or ""))
+
+        form.addRow("Tên sản phẩm *", name_edit)
+        form.addRow("Loại *", category_combo)
+        form.addRow("SKU", sku_edit)
+        form.addRow("Giá *", price_edit)
+        form.addRow("Tồn kho", stock_spin)
+        form.addRow("Mô tả", desc_edit)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_btn:
+            ok_btn.setText("Thêm" if existing is None else "Lưu")
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if cancel_btn:
+            cancel_btn.setText("Huỷ")
+        buttons.rejected.connect(dlg.reject)
+
+        def _on_ok() -> None:
+            try:
+                if existing is None:
+                    product_service.create_product(
+                        name=name_edit.text(),
+                        category=str(category_combo.currentData()),
+                        price=price_edit.text(),
+                        stock=int(stock_spin.value()),
+                        sku=sku_edit.text(),
+                        description=desc_edit.text(),
+                        is_active=True,
+                    )
+                else:
+                    product_service.update_product(
+                        product_id=existing.id,
+                        name=name_edit.text(),
+                        category=str(category_combo.currentData()),
+                        price=price_edit.text(),
+                        stock=int(stock_spin.value()),
+                        sku=sku_edit.text(),
+                        description=desc_edit.text(),
+                        is_active=True,
+                    )
+            except product_service.ProductError as exc:
+                QMessageBox.warning(dlg, "Sản phẩm", str(exc))
+                return
+            dlg.accept()
+
+        buttons.accepted.connect(_on_ok)
+        layout.addWidget(buttons)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._reload_products()
+
+    def _refresh_appointments_employee_filter(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page or not hasattr(ap_page, "employeeFilterCombo"):
+            return
+        combo = ap_page.employeeFilterCombo
+        prev = combo.currentData() if combo.count() else None
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Tất cả nhân viên", "ALL")
+        combo.addItem("Chưa phân công", "NONE")
+        for u in self._employees_list:
+            combo.addItem(f"{u.full_name} ({u.username})", int(u.id))
+        # Quyen: chi Admin moi duoc filter; Employee bat buoc xem cua minh
+        is_admin = bool(getattr(self, "_is_admin", False))
+        if not is_admin:
+            current = Session.current()
+            if current is not None:
+                idx = combo.findData(int(current.id))
+                if idx < 0:
+                    combo.addItem(
+                        f"{current.full_name} ({current.username})", int(current.id)
+                    )
+                    idx = combo.findData(int(current.id))
+                combo.setCurrentIndex(idx)
+            combo.setEnabled(False)
+        else:
+            combo.setEnabled(True)
+            idx = combo.findData(prev) if prev is not None else 0
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
+
+        try:
+            combo.currentIndexChanged.disconnect()
+        except TypeError:
+            pass
+        combo.currentIndexChanged.connect(lambda _: self._reload_appointments_table())
+
+    # ===================== /PRODUCTS =====================
+
     def _render_services_table(self) -> None:
         services_page = self._pages.get("services")
         if not services_page:
             return
         table: QTableWidget = services_page.servicesTable
-        table.setRowCount(len(self._services_list))
-        for r, s in enumerate(self._services_list):
+        rows = getattr(self, "_services_visible", None) or self._services_list
+        table.setRowCount(len(rows))
+        for r, s in enumerate(rows):
             table.setItem(r, 0, QTableWidgetItem(s.name))
             table.setItem(r, 1, QTableWidgetItem(f"{int(s.price):,}đ".replace(",", ".")))
             table.setItem(r, 2, QTableWidgetItem(s.description or ""))
@@ -2270,10 +3393,22 @@ class PetCareApp(QMainWindow):
         self._customers = []
         self._pets = []
         self._services_list = []
+        self._services_visible = []
+        self._products_list = []
+        self._employees_list = []
+        self._employees_stats: list = []
+
+        emp_page = self._pages.get("employees")
+        if emp_page and hasattr(emp_page, "employeesTable"):
+            emp_page.employeesTable.setRowCount(0)
 
         customers_page = self._pages.get("customers")
         if customers_page and hasattr(customers_page, "customersTable"):
             customers_page.customersTable.setRowCount(0)
+
+        products_page = self._pages.get("products")
+        if products_page and hasattr(products_page, "productsTable"):
+            products_page.productsTable.setRowCount(0)
 
         pets_page = self._pages.get("pets")
         if pets_page:
@@ -2343,8 +3478,32 @@ class PetCareApp(QMainWindow):
         if services_page and hasattr(services_page, "addServiceButton"):
             services_page.addServiceButton.setVisible(is_admin)
 
+        products_page = self._pages.get("products")
+        if products_page and hasattr(products_page, "addProductButton"):
+            products_page.addProductButton.setVisible(is_admin)
+
+        # Trang nhan vien chi danh cho Admin
+        if hasattr(self._main, "navEmployees"):
+            self._main.navEmployees.setVisible(is_admin)
+        emp_page = self._pages.get("employees")
+        if emp_page and hasattr(emp_page, "addEmployeeButton"):
+            emp_page.addEmployeeButton.setVisible(is_admin)
+
         # Luu flag de render action column
         self._is_admin = is_admin
+
+        # Cap nhat lai filter NV (Employee chi xem cua minh)
+        try:
+            self._refresh_appointments_employee_filter()
+        except Exception:
+            pass
+
+        # Tai du lieu thong ke nhan vien (chi can cho admin)
+        if is_admin:
+            try:
+                self._reload_employees_stats()
+            except Exception:
+                pass
 
     def _show_user_admin_dialog(self) -> None:
         if not Session.is_admin():
@@ -2373,6 +3532,20 @@ class PetCareApp(QMainWindow):
 
         root.addLayout(header)
 
+        # Search + role filter
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(10)
+        search_edit = QLineEdit()
+        search_edit.setPlaceholderText("Tìm theo họ tên / username / SĐT...")
+        role_combo = QComboBox()
+        role_combo.addItem("Tất cả role", "")
+        role_combo.addItem("ADMIN", "ADMIN")
+        role_combo.addItem("EMPLOYEE", "EMPLOYEE")
+        role_combo.setMinimumWidth(160)
+        filter_row.addWidget(search_edit, 1)
+        filter_row.addWidget(role_combo, 0)
+        root.addLayout(filter_row)
+
         table = QTableWidget()
         table.setColumnCount(7)
         table.setHorizontalHeaderLabels(
@@ -2383,7 +3556,10 @@ class PetCareApp(QMainWindow):
         root.addWidget(table, 1)
 
         def refresh() -> None:
-            rows = user_service.list_users(active_only=False)
+            q = (search_edit.text() or "").strip() or None
+            role_data = role_combo.currentData()
+            role = str(role_data) if role_data else None
+            rows = user_service.list_users(active_only=False, query=q, role_name=role)
             table.setRowCount(len(rows))
             for r, u in enumerate(rows):
                 table.setItem(r, 0, QTableWidgetItem(str(u["id"])))
@@ -2416,6 +3592,8 @@ class PetCareApp(QMainWindow):
             hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
 
         refresh()
+        search_edit.textChanged.connect(lambda _: refresh())
+        role_combo.currentIndexChanged.connect(lambda _: refresh())
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(dlg.reject)
@@ -2784,6 +3962,10 @@ class PetCareApp(QMainWindow):
             "appointments": self._main.navAppointments,
             "invoices": self._main.navInvoices,
         }
+        if hasattr(self._main, "navProducts"):
+            mapping["products"] = self._main.navProducts
+        if hasattr(self._main, "navEmployees"):
+            mapping["employees"] = self._main.navEmployees
         for k, btn in mapping.items():
             btn.setProperty("active", k == key)
             btn.style().unpolish(btn)

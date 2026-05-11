@@ -273,19 +273,59 @@ QScrollArea > QWidget > QWidget{background: transparent;}</string>
        <number>20</number>
       </property>
       <item>
-       <widget class="QLabel" name="recentTitle">
-        <property name="text">
-         <string>Danh sách lịch hẹn</string>
+       <layout class="QHBoxLayout" name="recentHeaderLayout">
+        <property name="spacing">
+         <number>10</number>
         </property>
-        <property name="styleSheet">
-         <string notr="true">font: 800 10pt "Segoe UI";</string>
-        </property>
-       </widget>
+        <item>
+         <widget class="QLabel" name="recentTitle">
+          <property name="text">
+           <string>Danh sách lịch hẹn</string>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font: 800 10pt "Segoe UI";</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="recentSpacer">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <widget class="QLabel" name="employeeFilterLabel">
+          <property name="text">
+           <string>Nhân viên</string>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">color: rgba(15,23,42,0.65); font: 700 9pt "Segoe UI";</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QComboBox" name="employeeFilterCombo">
+          <property name="minimumSize">
+           <size>
+            <width>200</width>
+            <height>0</height>
+           </size>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
       <item>
        <widget class="QTableWidget" name="appointmentsTable">
         <property name="columnCount">
-         <number>6</number>
+         <number>7</number>
         </property>
         <property name="minimumSize">
          <size>
@@ -314,6 +354,11 @@ QScrollArea > QWidget > QWidget{background: transparent;}</string>
         <column>
          <property name="text">
           <string>Dịch vụ</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Nhân viên</string>
          </property>
         </column>
         <column>

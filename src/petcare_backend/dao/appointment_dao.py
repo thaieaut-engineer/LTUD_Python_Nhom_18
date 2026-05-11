@@ -30,6 +30,13 @@ def update_note(appointment_id: int, note: str | None) -> None:
     execute("UPDATE appointment SET note=%s WHERE id=%s", (note, appointment_id))
 
 
+def update_employee(appointment_id: int, employee_id: int | None) -> None:
+    execute(
+        "UPDATE appointment SET employee_id=%s WHERE id=%s",
+        (employee_id, appointment_id),
+    )
+
+
 def get_by_id(appointment_id: int) -> dict[str, Any] | None:
     return fetch_one(
         "SELECT id, customer_id, pet_id, employee_id, scheduled_at, status, note, created_at "
@@ -79,10 +86,14 @@ SELECT
     )                                           AS total_amount,
     (
         SELECT COUNT(*) FROM appointment_service aps4 WHERE aps4.appointment_id = a.id
-    )                                           AS service_count
+    )                                           AS service_count,
+    a.employee_id                               AS employee_id,
+    u.full_name                                 AS employee_name,
+    u.username                                  AS employee_username
 FROM appointment a
 JOIN customer c       ON c.id = a.customer_id
 LEFT JOIN pet pet_single ON pet_single.id = a.pet_id
+LEFT JOIN user u         ON u.id = a.employee_id
 {where_clause}
 ORDER BY a.scheduled_at DESC, a.id DESC
 LIMIT %s
@@ -97,3 +108,13 @@ def list_recent(limit: int = 100) -> list[dict[str, Any]]:
 def list_by_customer(customer_id: int, limit: int = 200) -> list[dict[str, Any]]:
     sql = _SUMMARY_SQL.format(where_clause="WHERE a.customer_id = %s")
     return fetch_all(sql, (customer_id, int(limit)))
+
+
+def list_by_employee(employee_id: int, limit: int = 200) -> list[dict[str, Any]]:
+    sql = _SUMMARY_SQL.format(where_clause="WHERE a.employee_id = %s")
+    return fetch_all(sql, (employee_id, int(limit)))
+
+
+def list_unassigned(limit: int = 200) -> list[dict[str, Any]]:
+    sql = _SUMMARY_SQL.format(where_clause="WHERE a.employee_id IS NULL")
+    return fetch_all(sql, (int(limit),))

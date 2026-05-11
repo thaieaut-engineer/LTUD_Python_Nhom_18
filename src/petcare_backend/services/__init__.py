@@ -7,6 +7,7 @@ from . import (
     invoice_service,
     payment_service,
     pet_service,
+    product_service,
     service_service,
     user_service,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "customer_service",
     "pet_service",
     "service_service",
+    "product_service",
     "user_service",
     "appointment_service",
     "invoice_service",

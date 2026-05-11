@@ -9,7 +9,8 @@ from datetime import datetime
 
 from mysql.connector import Error as MySQLError
 
-from ..dao import appointment_dao, appointment_service_dao, service_dao
+from ..activity_log import log_admin
+from ..dao import appointment_dao, appointment_service_dao, service_dao, user_dao
 from ..session import Session
 
 
@@ -110,19 +111,90 @@ def create_appointment(
     )
 
 
-def list_recent(limit: int = 100) -> list[dict]:
-    rows = appointment_dao.list_recent(limit=limit)
+def _decorate(rows: list[dict]) -> list[dict]:
     for r in rows:
         r["status_label"] = STATUS_DB_TO_LABEL.get(r.get("status"), str(r.get("status")))
     return rows
 
 
+def list_recent(limit: int = 100, *, employee_id: int | None = None) -> list[dict]:
+    """Liet ke lich hen gan day. Neu employee_id != None -> chi cua nhan vien do."""
+    if employee_id is not None:
+        return _decorate(appointment_dao.list_by_employee(int(employee_id), limit=limit))
+    return _decorate(appointment_dao.list_recent(limit=limit))
+
+
+def list_for_employee(employee_id: int, limit: int = 200) -> list[dict]:
+    return _decorate(appointment_dao.list_by_employee(int(employee_id), limit=limit))
+
+
+def list_unassigned(limit: int = 200) -> list[dict]:
+    return _decorate(appointment_dao.list_unassigned(limit=limit))
+
+
 def update_status(appointment_id: int, status_label: str) -> None:
+    """Cap nhat trang thai. Cho phep:
+
+    - ADMIN luon duoc cap nhat.
+    - EMPLOYEE chi duoc cap nhat lich hen do minh phu trach (employee_id == minh).
+    """
     status_db = STATUS_LABEL_TO_DB.get(status_label)
     if not status_db:
         raise AppointmentError("Trạng thái không hợp lệ.")
+
+    current = Session.current()
+    if current is not None and not current.is_admin:
+        ap = appointment_dao.get_by_id(appointment_id)
+        if ap is None:
+            raise AppointmentError("Lịch hẹn không tồn tại.")
+        if ap.get("employee_id") and int(ap["employee_id"]) != int(current.id):
+            raise AppointmentError(
+                "Bạn không phải nhân viên phụ trách lịch hẹn này."
+            )
+
     appointment_dao.update_status(appointment_id, status_db)
 
 
 def update_result_note(appointment_id: int, result: str) -> None:
+    current = Session.current()
+    if current is not None and not current.is_admin:
+        ap = appointment_dao.get_by_id(appointment_id)
+        if ap is None:
+            raise AppointmentError("Lịch hẹn không tồn tại.")
+        if ap.get("employee_id") and int(ap["employee_id"]) != int(current.id):
+            raise AppointmentError(
+                "Bạn không phải nhân viên phụ trách lịch hẹn này."
+            )
     appointment_dao.update_note(appointment_id, (result or "").strip() or None)
+
+
+def assign_employee(appointment_id: int, employee_id: int | None) -> None:
+    """Phan cong nhan vien cham soc cho 1 lich hen. Chi Admin moi duoc thuc hien."""
+    if not Session.is_admin():
+        raise AppointmentError("Chỉ Admin mới được phân công nhân viên.")
+
+    if employee_id is not None:
+        emp = user_dao.get_by_id(int(employee_id))
+        if emp is None:
+            raise AppointmentError("Không tìm thấy nhân viên.")
+        if emp.role_name.upper() != "EMPLOYEE":
+            raise AppointmentError("Chỉ phân công cho tài khoản EMPLOYEE.")
+        if not emp.is_active:
+            raise AppointmentError("Nhân viên này đã bị khoá.")
+
+    ap = appointment_dao.get_by_id(int(appointment_id))
+    if ap is None:
+        raise AppointmentError("Lịch hẹn không tồn tại.")
+
+    appointment_dao.update_employee(int(appointment_id), int(employee_id) if employee_id else None)
+    msg = (
+        f"Bỏ phân công lịch hẹn #{appointment_id}"
+        if employee_id is None
+        else f"Phân công lịch hẹn #{appointment_id} cho user #{employee_id}"
+    )
+    log_admin(
+        "ASSIGN_APPOINTMENT",
+        entity="appointment",
+        entity_id=int(appointment_id),
+        message=msg,
+    )

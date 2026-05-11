@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>InvoicesPage</class>
- <widget class="QWidget" name="InvoicesPage">
+ <class>ProductsPage</class>
+ <widget class="QWidget" name="ProductsPage">
   <property name="styleSheet">
-   <string notr="true">QLabel#Muted{color: #64748B; font: 600 10pt "Segoe UI";}</string>
+   <string notr="true">QFrame#Card{
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #FFFFFF, stop:0.6 #F6FAFF, stop:1 #FFF3F8);
+border: 1px solid #D6E2F7;
+border-radius: 16px;
+}</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="leftMargin">
@@ -26,7 +30,7 @@
      <item>
       <widget class="QLabel" name="headerEmoji">
        <property name="text">
-        <string>💵</string>
+        <string>🛍️</string>
        </property>
        <property name="styleSheet">
         <string notr="true">font-size: 18px;</string>
@@ -39,7 +43,7 @@
         <string>PageTitle</string>
        </property>
        <property name="text">
-        <string>Hóa đơn</string>
+        <string>Đồ ăn &amp; Phụ kiện</string>
        </property>
       </widget>
      </item>
@@ -57,25 +61,12 @@
       </spacer>
      </item>
      <item>
-      <widget class="QPushButton" name="createRetailButton">
-       <property name="objectName">
-        <string>GhostButton</string>
-       </property>
-       <property name="text">
-        <string>🛒  Bán lẻ (POS)</string>
-       </property>
-       <property name="cursor">
-        <cursorShape>PointingHandCursor</cursorShape>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="createInvoiceButton">
+      <widget class="QPushButton" name="addProductButton">
        <property name="objectName">
         <string>PrimaryButton</string>
        </property>
        <property name="text">
-        <string>＋  Tạo HĐ dịch vụ</string>
+        <string>＋  Thêm sản phẩm</string>
        </property>
        <property name="cursor">
         <cursorShape>PointingHandCursor</cursorShape>
@@ -85,19 +76,19 @@
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="invoiceFilterLayout">
+    <layout class="QHBoxLayout" name="filterLayout">
      <property name="spacing">
       <number>10</number>
      </property>
      <item>
       <widget class="QLineEdit" name="searchEdit">
        <property name="placeholderText">
-        <string>Tìm theo mã HĐ / khách hàng...</string>
+        <string>Tìm theo tên / SKU / mô tả...</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QComboBox" name="typeFilterCombo">
+      <widget class="QComboBox" name="categoryFilterCombo">
        <property name="minimumSize">
         <size>
          <width>180</width>
@@ -109,43 +100,70 @@
     </layout>
    </item>
    <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
-   <item>
-    <widget class="QLabel" name="emptyLabel">
+    <widget class="QFrame" name="Card">
      <property name="objectName">
-      <string>Muted</string>
+      <string>Card</string>
      </property>
-     <property name="text">
-      <string>Chưa có hóa đơn nào</string>
-     </property>
-     <property name="alignment">
-      <set>Qt::AlignCenter</set>
-     </property>
+     <layout class="QVBoxLayout" name="cardLayout">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QTableWidget" name="productsTable">
+        <property name="columnCount">
+         <number>7</number>
+        </property>
+        <attribute name="horizontalHeaderDefaultSectionSize">
+         <number>140</number>
+        </attribute>
+        <column>
+         <property name="text">
+          <string>Tên sản phẩm</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Loại</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>SKU</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Giá</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Tồn kho</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Mô tả</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Thao tác</string>
+         </property>
+        </column>
+       </widget>
+      </item>
+     </layout>
     </widget>
-   </item>
-   <item>
-    <spacer name="verticalSpacer_2">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>200</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>

@@ -55,3 +55,14 @@ INSERT INTO appointment_service (appointment_id, service_id, quantity, unit_pric
     (1, 1, 1, 150000),
     (1, 5, 1, 50000),
     (2, 2, 1, 250000);
+
+-- ---------- product (do an / phu kien) ----------
+INSERT INTO product (name, category, sku, price, stock, description, is_active) VALUES
+    (N'Hạt Royal Canin Adult 1kg', 'DO_AN',    'RC-ADL-1KG',  220000, 30,  N'Thức ăn hạt cho chó trưởng thành', 1),
+    (N'Pate Whiskas vị cá 80g',    'DO_AN',    'WK-CA-80',    18000,  120, N'Pate cho mèo, vị cá biển',         1),
+    (N'Snack Pedigree Dentastix',  'DO_AN',    'PD-STX',      45000,  80,  N'Snack chăm sóc răng miệng cho chó',1),
+    (N'Vòng cổ da size M',         'PHU_KIEN', 'CL-LE-M',     85000,  25,  N'Vòng cổ da bò size M',             1),
+    (N'Dây dắt nylon 1.5m',        'PHU_KIEN', 'LS-NY-150',   60000,  40,  N'Dây dắt nylon dài 1.5m',           1),
+    (N'Lồng vận chuyển size M',    'PHU_KIEN', 'CG-M',        450000, 8,   N'Lồng nhựa di chuyển thú cưng',     1),
+    (N'Bát ăn inox đôi',           'PHU_KIEN', 'BW-IN-2',     95000,  50,  N'Bát ăn inox kèm đế cao su',        1),
+    (N'Sữa tắm bưởi Bio 250ml',    'PHU_KIEN', 'SH-BIO-250',  130000, 35,  N'Sữa tắm hương bưởi cho thú cưng',  1);

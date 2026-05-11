@@ -75,6 +75,33 @@ class CustomerStats:
 
 
 @dataclass(frozen=True)
+class EmployeePerformance:
+    employee_id: int
+    username: str
+    full_name: str
+    phone: str | None
+    is_active: bool
+    appointment_count: int
+    appointment_done: int
+    appointment_in_progress: int
+    appointment_pending: int
+    service_revenue: Decimal
+    retail_revenue: Decimal
+    invoice_count: int
+    total_revenue: Decimal
+
+
+@dataclass(frozen=True)
+class EmployeePerformanceReport:
+    start: date | None
+    end: date | None
+    employees: list[EmployeePerformance]
+    total_revenue: Decimal
+    total_appointments: int
+    total_invoices: int
+
+
+@dataclass(frozen=True)
 class DashboardOverview:
     today: date
     revenue_today: Decimal
@@ -366,6 +393,77 @@ def dashboard_overview(
         top_services=top,
         vip_customers=vips,
     )
+
+
+# ---------------------------------------------------------------------------
+# 5) Thong ke nhan vien - doanh so theo NV
+# ---------------------------------------------------------------------------
+
+def employee_performance_stats(
+    start: date | None = None,
+    end: date | None = None,
+) -> EmployeePerformanceReport:
+    """Bao cao hieu suat & doanh so theo nhan vien.
+
+    - Neu khong truyen [start, end]: tinh toan bo lich su.
+    - Sap xep nhan vien theo total_revenue giam dan.
+    """
+    if start is not None and end is not None:
+        start, end = _validate_range(start, end)
+    elif (start is None) ^ (end is None):
+        raise ReportError("Phai truyen ca start va end, hoac khong truyen ca hai.")
+
+    rows = report_dao.employee_performance(start, end)
+    employees: list[EmployeePerformance] = []
+    total_rev = Decimal("0")
+    total_appts = 0
+    total_invs = 0
+    for r in rows:
+        srv = _dec(r.get("service_revenue"))
+        ret = _dec(r.get("retail_revenue"))
+        tot = srv + ret
+        emp = EmployeePerformance(
+            employee_id=int(r["employee_id"]),
+            username=str(r["username"]),
+            full_name=str(r["full_name"]),
+            phone=r.get("phone"),
+            is_active=bool(r.get("is_active")),
+            appointment_count=int(r.get("appointment_count") or 0),
+            appointment_done=int(r.get("appointment_done") or 0),
+            appointment_in_progress=int(r.get("appointment_in_progress") or 0),
+            appointment_pending=int(r.get("appointment_pending") or 0),
+            service_revenue=srv,
+            retail_revenue=ret,
+            invoice_count=int(r.get("invoice_count") or 0),
+            total_revenue=tot,
+        )
+        employees.append(emp)
+        total_rev += tot
+        total_appts += emp.appointment_count
+        total_invs += emp.invoice_count
+
+    return EmployeePerformanceReport(
+        start=start,
+        end=end,
+        employees=employees,
+        total_revenue=total_rev,
+        total_appointments=total_appts,
+        total_invoices=total_invs,
+    )
+
+
+def employee_recent_appointments(employee_id: int, limit: int = 50):
+    """Tra ve danh sach dict cac lich hen gan day cua nhan vien."""
+    if employee_id <= 0:
+        raise ReportError("employee_id khong hop le.")
+    return report_dao.employee_recent_appointments(employee_id, limit)
+
+
+def employee_recent_invoices(employee_id: int, limit: int = 50):
+    """Tra ve danh sach dict cac hoa don gan day lien quan toi nhan vien."""
+    if employee_id <= 0:
+        raise ReportError("employee_id khong hop le.")
+    return report_dao.employee_recent_invoices(employee_id, limit)
 
 
 # ---------------------------------------------------------------------------

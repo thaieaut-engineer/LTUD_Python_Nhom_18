@@ -28,9 +28,21 @@ def list_roles() -> list[dict]:
     return list(role_dao.list_all())
 
 
-def list_users(active_only: bool = False) -> list[dict]:
+def list_users(
+    active_only: bool = False,
+    query: str | None = None,
+    role_name: str | None = None,
+) -> list[dict]:
+    """Liet ke user (chi Admin). Ho tro tim kiem va loc theo role."""
     _require_admin()
-    return user_dao.list_all_with_role(active_only=active_only)
+    return user_dao.list_all_with_role(
+        active_only=active_only, query=query, role_name=role_name
+    )
+
+
+def list_employees(active_only: bool = True) -> list:
+    """Liet ke nhan vien (EMPLOYEE) cho dropdown phan cong - moi user da login deu goi duoc."""
+    return user_dao.list_employees(active_only=active_only)
 
 
 def register_employee(username: str, password: str, full_name: str, phone: str | None = None) -> int:

@@ -54,12 +54,47 @@ def list_all(active_only: bool = False) -> list[User]:
     return [_row_to_user(r) for r in fetch_all(sql)]
 
 
+def list_employees(active_only: bool = True) -> list[User]:
+    """Liet ke nhan vien (role = EMPLOYEE)."""
+    sql = _SELECT_BASE + " WHERE r.name = 'EMPLOYEE'"
+    if active_only:
+        sql += " AND u.is_active = 1"
+    sql += " ORDER BY u.full_name"
+    return [_row_to_user(r) for r in fetch_all(sql)]
+
+
 # -------- Admin CRUD helpers --------
 
 
-def list_all_with_role(active_only: bool = False) -> list[dict[str, Any]]:
-    sql = _SELECT_BASE + (" WHERE u.is_active = 1" if active_only else "") + " ORDER BY u.id DESC"
-    return fetch_all(sql)
+def list_all_with_role(
+    active_only: bool = False,
+    query: str | None = None,
+    role_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """Liet ke user kem role, ho tro tim kiem va loc theo role.
+
+    - query   : khop ten / username / phone (LIKE).
+    - role_name: ADMIN | EMPLOYEE (None => khong loc).
+    """
+    sql = _SELECT_BASE
+    where: list[str] = []
+    params: list[Any] = []
+    if active_only:
+        where.append("u.is_active = 1")
+    if role_name:
+        where.append("r.name = %s")
+        params.append(role_name.upper())
+    q = (query or "").strip()
+    if q:
+        like = f"%{q}%"
+        where.append(
+            "(u.full_name LIKE %s OR u.username LIKE %s OR u.phone LIKE %s)"
+        )
+        params.extend([like, like, like])
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY u.id DESC"
+    return fetch_all(sql, tuple(params))
 
 
 def create(role_id: int, username: str, password_hash: str, full_name: str, phone: str | None) -> int:

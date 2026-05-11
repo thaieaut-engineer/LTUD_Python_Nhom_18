@@ -19,13 +19,21 @@ def _row_to_service(row: dict[str, Any]) -> Service:
     )
 
 
-def list_all(active_only: bool = True) -> list[Service]:
+def list_all(active_only: bool = True, query: str | None = None) -> list[Service]:
     sql = "SELECT id, name, price, description, duration_min, is_active FROM service"
-    params: Sequence[Any] = ()
+    where: list[str] = []
+    params: list[Any] = []
     if active_only:
-        sql += " WHERE is_active=1"
+        where.append("is_active=1")
+    q = (query or "").strip()
+    if q:
+        like = f"%{q}%"
+        where.append("(name LIKE %s OR description LIKE %s)")
+        params.extend([like, like])
+    if where:
+        sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY id DESC"
-    return [_row_to_service(r) for r in fetch_all(sql, params)]
+    return [_row_to_service(r) for r in fetch_all(sql, tuple(params))]
 
 
 def get_by_id(service_id: int) -> Service | None:

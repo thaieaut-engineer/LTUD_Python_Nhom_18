@@ -76,3 +76,62 @@ Xây dựng phần mềm giúp:
 - Phân quyền:
     + Admin
     + Nhân viên
+
+2.8 Bán đồ ăn / phụ kiện
+- Quản lý sản phẩm (đồ ăn, phụ kiện): thêm / sửa / ẩn, theo dõi tồn kho
+- Tạo hóa đơn bán lẻ (POS) — không cần lịch hẹn, chọn khách hàng (hoặc khách vãng lai) + sản phẩm
+- Thêm sản phẩm vào hóa đơn dịch vụ đã có
+- Tự động trừ tồn kho khi tạo hóa đơn, hoàn lại khi xóa dòng
+
+2.9 Quản lý nhân viên & phân công
+- Admin quản lý người dùng (Admin / Nhân viên), tìm kiếm theo tên/username/SĐT, lọc theo role
+- Admin phân công nhân viên chăm sóc cho từng lịch hẹn
+- Nhân viên được phân công có thể cập nhật trạng thái + kết quả dịch vụ của lịch hẹn của mình
+- Nhân viên (không phải Admin) chỉ thấy những lịch hẹn được phân công cho mình
+- Lọc lịch hẹn theo nhân viên (Admin) hoặc xem riêng "Chưa phân công"
+
+2.10 Tìm kiếm
+- Khách hàng: theo tên / số điện thoại
+- Dịch vụ: theo tên / mô tả
+- Sản phẩm: theo tên / SKU / mô tả + lọc theo loại (đồ ăn / phụ kiện)
+- Hóa đơn: theo mã HĐ / khách hàng + lọc theo loại (dịch vụ / bán lẻ)
+- Nhân viên: trong dialog Quản lý người dùng
+
+2.11 Liên kết User – Appointment, User – Invoice
+- Lịch hẹn lưu `employee_id` (nhân viên phụ trách); danh sách hiển thị tên NV
+- Hóa đơn lưu `created_by` (người lập); danh sách hiển thị cột "Người tạo"
+
+2.12 Trang Nhân viên (Admin)
+- Trang riêng trên sidebar (chỉ Admin): danh sách nhân viên, tìm kiếm theo
+  tên / username / SĐT.
+- Bảng hiển thị thông tin tổng quan: trạng thái, tổng lịch hẹn được phân
+  công, số lịch hoàn thành.
+- Thao tác trực tiếp: Chi tiết, Sửa thông tin, Reset mật khẩu, Khoá / Mở khoá.
+- Dialog "Chi tiết nhân viên": KPI đầy đủ (lịch hẹn / HĐ dịch vụ / HĐ bán lẻ
+  / tổng doanh thu) + bảng lịch hẹn gần đây + bảng hóa đơn gần đây.
+
+2.13 Thống kê doanh số nhân viên (Trang chủ)
+- Trang chủ có panel "Doanh số theo nhân viên" dùng chung bộ lọc ngày
+  của dashboard (Hôm nay / 7 ngày / 30 ngày / Tháng này / Tuỳ chỉnh).
+- Bảng xếp hạng nhân viên theo doanh thu (giảm dần) với các cột:
+  Lịch hẹn, Hoàn thành, HĐ dịch vụ, HĐ bán lẻ, **Tổng doanh thu**.
+- Doanh thu = HĐ Dịch vụ (DA_TT) của lịch hẹn NV phụ trách +
+  HĐ Bán lẻ (DA_TT) do chính NV lập.
+- Tự fallback "toàn thời gian" nếu khoảng đã chọn chưa có dữ liệu.
+
+## Cài đặt cơ sở dữ liệu
+
+Lần đầu chạy:
+```
+python scripts/init_db.py            # tạo schema + seed (đã có sẵn product, invoice mở rộng)
+```
+
+Nếu bạn đang dùng database cũ (đã chạy `init_db.py` trước khi có tính năng mới), hãy chạy migration để cập nhật:
+```
+mysql -u root -p petcare_db < database/migrations/add_products_and_assignment.sql
+```
+Migration này:
+- Tạo bảng `product`
+- Cho phép `invoice.appointment_id` NULL, thêm `invoice.customer_id`, `invoice.invoice_type`
+- Mở rộng `invoice_item` để hỗ trợ cả dịch vụ và sản phẩm
+- Tạo view `v_invoice_with_creator`, `v_appointment_with_employee` cho báo cáo

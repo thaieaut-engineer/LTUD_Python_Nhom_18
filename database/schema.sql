@@ -148,11 +148,35 @@ CREATE TABLE appointment_service (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- 8. invoice (hoa don)
+-- 8. product (do an / phu kien) - moi
+-- ---------------------------------------------------------------------
+CREATE TABLE product (
+    id              INT             AUTO_INCREMENT PRIMARY KEY,
+    name            VARCHAR(120)    NOT NULL UNIQUE,
+    category        VARCHAR(20)     NOT NULL DEFAULT 'PHU_KIEN'
+                                    COMMENT 'DO_AN | PHU_KIEN',
+    sku             VARCHAR(40)     NULL,
+    price           DECIMAL(12,2)   NOT NULL DEFAULT 0 CHECK (price >= 0),
+    stock           INT             NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    description     TEXT            NULL,
+    is_active       TINYINT(1)      NOT NULL DEFAULT 1,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_product_category (category),
+    INDEX idx_product_active (is_active)
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
+-- 9. invoice (hoa don)
+--   - appointment_id NULL khi la hoa don ban le (POS)
+--   - customer_id luu ban le (walk-in van co the NULL)
 -- ---------------------------------------------------------------------
 CREATE TABLE invoice (
     id                  INT             AUTO_INCREMENT PRIMARY KEY,
-    appointment_id      INT             NOT NULL UNIQUE COMMENT 'Moi appointment chi co 1 hoa don',
+    appointment_id      INT             NULL UNIQUE COMMENT 'NULL voi hoa don ban le; voi hoa don dich vu thi 1-1 voi appointment',
+    customer_id         INT             NULL COMMENT 'Khach hang (cho hoa don ban le)',
+    invoice_type        ENUM('SERVICE','RETAIL') NOT NULL DEFAULT 'SERVICE',
     invoice_no          VARCHAR(30)     NOT NULL UNIQUE,
     issued_at           DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     subtotal_amount     DECIMAL(14,2)   NOT NULL DEFAULT 0 CHECK (subtotal_amount >= 0),
@@ -169,20 +193,28 @@ CREATE TABLE invoice (
     CONSTRAINT fk_inv_appointment
         FOREIGN KEY (appointment_id) REFERENCES appointment(id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_inv_customer
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
     CONSTRAINT fk_inv_user
         FOREIGN KEY (created_by) REFERENCES user(id)
         ON UPDATE CASCADE ON DELETE SET NULL,
     INDEX idx_inv_issued (issued_at),
-    INDEX idx_inv_status (payment_status)
+    INDEX idx_inv_status (payment_status),
+    INDEX idx_inv_customer (customer_id),
+    INDEX idx_inv_type (invoice_type)
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- 9. invoice_item (chi tiet hoa don)
+-- 10. invoice_item (chi tiet hoa don)
+--    Ho tro CA dich vu CA san pham. Dung item_type de phan loai.
 -- ---------------------------------------------------------------------
 CREATE TABLE invoice_item (
     id              INT             AUTO_INCREMENT PRIMARY KEY,
     invoice_id      INT             NOT NULL,
-    service_id      INT             NOT NULL,
+    service_id      INT             NULL,
+    product_id      INT             NULL,
+    item_type       ENUM('SERVICE','PRODUCT') NOT NULL DEFAULT 'SERVICE',
     pet_id          INT             NULL COMMENT 'Dich vu cho pet nao (copy tu appointment_service)',
     quantity        INT             NOT NULL DEFAULT 1 CHECK (quantity > 0),
     unit_price      DECIMAL(12,2)   NOT NULL CHECK (unit_price >= 0),
@@ -193,16 +225,20 @@ CREATE TABLE invoice_item (
     CONSTRAINT fk_item_service
         FOREIGN KEY (service_id) REFERENCES service(id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_item_product
+        FOREIGN KEY (product_id) REFERENCES product(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_item_pet
         FOREIGN KEY (pet_id) REFERENCES pet(id)
         ON UPDATE CASCADE ON DELETE SET NULL,
     INDEX idx_item_invoice (invoice_id),
     INDEX idx_item_service (service_id),
+    INDEX idx_item_product (product_id),
     INDEX idx_item_pet (pet_id)
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- 10. payment (thanh toan)
+-- 11. payment (thanh toan)
 -- ---------------------------------------------------------------------
 CREATE TABLE payment (
     id              INT             AUTO_INCREMENT PRIMARY KEY,
@@ -224,7 +260,7 @@ CREATE TABLE payment (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- 11. activity_log (optional - nhat ky thao tac ADMIN)
+-- 12. activity_log (optional - nhat ky thao tac ADMIN)
 -- ---------------------------------------------------------------------
 CREATE TABLE activity_log (
     id              BIGINT          AUTO_INCREMENT PRIMARY KEY,
