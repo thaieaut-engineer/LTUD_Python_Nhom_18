@@ -72,6 +72,94 @@ def revenue_on_date(day: date) -> dict[str, Any]:
     return revenue_summary(day, day)
 
 
+def retail_revenue_by_product_category(start: date, end: date) -> list[dict[str, Any]]:
+    """Doanh thu ban le (dong invoice_item PRODUCT) gop theo product.category (DO_AN / PHU_KIEN).
+
+    Chi tinh hoa don da thanh toan trong khoang issued_at.
+    """
+    sql = """
+    SELECT p.category                        AS category,
+           COALESCE(SUM(ii.line_total), 0) AS total_revenue
+    FROM   invoice_item ii
+    JOIN   invoice      i ON i.id = ii.invoice_id
+    JOIN   product      p ON p.id = ii.product_id
+    WHERE  ii.item_type = 'PRODUCT'
+      AND  ii.product_id IS NOT NULL
+      AND  i.payment_status = 'DA_TT'
+      AND  DATE(i.issued_at) BETWEEN %s AND %s
+    GROUP  BY p.category
+    HAVING total_revenue > 0
+    ORDER  BY total_revenue DESC
+    """
+    return fetch_all(sql, (start, end))
+
+
+def retail_revenue_by_product(start: date, end: date) -> list[dict[str, Any]]:
+    """Doanh thu ban le theo tung san pham (kem category DO_AN / PHU_KIEN)."""
+    sql = """
+    SELECT p.id                             AS product_id,
+           p.name                           AS product_name,
+           p.category                       AS category,
+           COALESCE(SUM(ii.line_total), 0) AS total_revenue
+    FROM   invoice_item ii
+    JOIN   invoice      i ON i.id = ii.invoice_id
+    JOIN   product       p ON p.id = ii.product_id
+    WHERE  ii.item_type = 'PRODUCT'
+      AND  ii.product_id IS NOT NULL
+      AND  i.payment_status = 'DA_TT'
+      AND  DATE(i.issued_at) BETWEEN %s AND %s
+    GROUP  BY p.id, p.name, p.category
+    HAVING total_revenue > 0
+    ORDER  BY total_revenue DESC
+    """
+    return fetch_all(sql, (start, end))
+
+
+def retail_revenue_by_category_by_day(start: date, end: date) -> list[dict[str, Any]]:
+    """Doanh thu ban le PRODUCT theo ngay va theo product.category (DO_AN / PHU_KIEN)."""
+    sql = """
+    SELECT DATE(i.issued_at)                 AS revenue_date,
+           p.category                        AS category,
+           COALESCE(SUM(ii.line_total), 0)  AS total_revenue
+    FROM   invoice_item ii
+    JOIN   invoice      i ON i.id = ii.invoice_id
+    JOIN   product       p ON p.id = ii.product_id
+    WHERE  ii.item_type = 'PRODUCT'
+      AND  ii.product_id IS NOT NULL
+      AND  i.payment_status = 'DA_TT'
+      AND  DATE(i.issued_at) BETWEEN %s AND %s
+    GROUP  BY DATE(i.issued_at), p.category
+    ORDER  BY revenue_date, p.category
+    """
+    return fetch_all(sql, (start, end))
+
+
+def retail_revenue_by_product_in_category(
+    start: date,
+    end: date,
+    category: str,
+) -> list[dict[str, Any]]:
+    """Doanh thu ban le theo san pham, chi trong mot category."""
+    sql = """
+    SELECT p.id                             AS product_id,
+           p.name                           AS product_name,
+           p.category                       AS category,
+           COALESCE(SUM(ii.line_total), 0) AS total_revenue
+    FROM   invoice_item ii
+    JOIN   invoice      i ON i.id = ii.invoice_id
+    JOIN   product       p ON p.id = ii.product_id
+    WHERE  ii.item_type = 'PRODUCT'
+      AND  ii.product_id IS NOT NULL
+      AND  i.payment_status = 'DA_TT'
+      AND  DATE(i.issued_at) BETWEEN %s AND %s
+      AND  p.category = %s
+    GROUP  BY p.id, p.name, p.category
+    HAVING total_revenue > 0
+    ORDER  BY total_revenue DESC
+    """
+    return fetch_all(sql, (start, end, category))
+
+
 # ---------------------------------------------------------------------------
 # Dich vu pho bien
 # ---------------------------------------------------------------------------

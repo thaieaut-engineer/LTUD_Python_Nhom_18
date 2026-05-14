@@ -16,6 +16,7 @@ from ..dao import report_dao
 
 
 TopBy = Literal["quantity", "revenue"]
+RetailCategory = Literal["DO_AN", "PHU_KIEN"]
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +66,26 @@ class VipCustomer:
     phone: str | None
     invoice_count: int
     total_spent: Decimal
+
+
+@dataclass(frozen=True)
+class RetailProductRevenue:
+    """Doanh thu ban le tren tung mat hang."""
+
+    product_id: int
+    product_name: str
+    category_code: str
+    category_label: str
+    total_revenue: Decimal
+
+
+@dataclass(frozen=True)
+class RetailCategoryDailyPoint:
+    """Doanh thu ban le (san pham) theo ngay: tach do an vs phu kien."""
+
+    day: date
+    do_an: Decimal
+    phu_kien: Decimal
 
 
 @dataclass(frozen=True)
@@ -259,6 +280,116 @@ def revenue_today() -> RevenueSummary:
 def revenue_this_month() -> RevenueSummary:
     s, e = current_month_range()
     return revenue_in_range(s, e)
+
+
+_RETAIL_CAT_LABELS = {"DO_AN": "Đồ ăn", "PHU_KIEN": "Phụ kiện"}
+_RETAIL_PIE_MAX_SLICES = 14
+
+
+def retail_category_revenue(start: date, end: date) -> list[RetailProductRevenue]:
+    """Gop theo category (2 slice). Giữ de tuong thich; uu tien dung `retail_product_revenue`."""
+    start, end = _validate_range(start, end)
+    rows = report_dao.retail_revenue_by_product_category(start, end)
+    return [
+        RetailProductRevenue(
+            product_id=-(i + 1),
+            product_name=_RETAIL_CAT_LABELS.get(str(r["category"]), str(r["category"])),
+            category_code=str(r["category"]),
+            category_label=_RETAIL_CAT_LABELS.get(str(r["category"]), str(r["category"])),
+            total_revenue=_dec(r["total_revenue"]),
+        )
+        for i, r in enumerate(rows)
+    ]
+
+
+def retail_category_revenue_by_day(start: date, end: date) -> list[RetailCategoryDailyPoint]:
+    """Moi ngay trong khoang: tong doanh thu ban le do an va phu kien."""
+    start, end = _validate_range(start, end)
+    rows = report_dao.retail_revenue_by_category_by_day(start, end)
+    by_day: dict[date, dict[str, Decimal]] = {}
+    for r in rows:
+        d = _as_date(r["revenue_date"])
+        cat = str(r["category"])
+        by_day.setdefault(d, {})[cat] = _dec(r["total_revenue"])
+
+    out: list[RetailCategoryDailyPoint] = []
+    cur = start
+    while cur <= end:
+        m = by_day.get(cur, {})
+        out.append(
+            RetailCategoryDailyPoint(
+                day=cur,
+                do_an=m.get("DO_AN", Decimal("0")),
+                phu_kien=m.get("PHU_KIEN", Decimal("0")),
+            )
+        )
+        cur += timedelta(days=1)
+    return out
+
+
+def _retail_product_items_from_rows(rows: list) -> list[RetailProductRevenue]:
+    return [
+        RetailProductRevenue(
+            product_id=int(r["product_id"]),
+            product_name=str(r["product_name"]),
+            category_code=str(r["category"]),
+            category_label=_RETAIL_CAT_LABELS.get(str(r["category"]), str(r["category"])),
+            total_revenue=_dec(r["total_revenue"]),
+        )
+        for r in rows
+    ]
+
+
+def retail_product_revenue_in_category(
+    start: date,
+    end: date,
+    category: RetailCategory,
+) -> list[RetailProductRevenue]:
+    """Top san pham trong mot nhom (cho bieu do tron chi tiet)."""
+    start, end = _validate_range(start, end)
+    if category not in ("DO_AN", "PHU_KIEN"):
+        raise ReportError("category phai la DO_AN hoac PHU_KIEN")
+    rows = report_dao.retail_revenue_by_product_in_category(start, end, category)
+    items = _retail_product_items_from_rows(rows)
+    items.sort(key=lambda x: float(x.total_revenue), reverse=True)
+    if len(items) <= _RETAIL_PIE_MAX_SLICES:
+        return items
+    head = items[: _RETAIL_PIE_MAX_SLICES - 1]
+    tail = items[_RETAIL_PIE_MAX_SLICES - 1 :]
+    other = sum((float(x.total_revenue) for x in tail), 0.0)
+    head.append(
+        RetailProductRevenue(
+            product_id=-1,
+            product_name=f"Khác ({len(tail)} sản phẩm)",
+            category_code="KHAC",
+            category_label="—",
+            total_revenue=Decimal(str(other)),
+        )
+    )
+    return head
+
+
+def retail_product_revenue(start: date, end: date) -> list[RetailProductRevenue]:
+    """Doanh thu ban le theo tung san pham trong khoang; gop phan du neu qua nhieu mat hang."""
+    start, end = _validate_range(start, end)
+    rows = report_dao.retail_revenue_by_product(start, end)
+    items = _retail_product_items_from_rows(rows)
+    items.sort(key=lambda x: float(x.total_revenue), reverse=True)
+    if len(items) <= _RETAIL_PIE_MAX_SLICES:
+        return items
+    head = items[: _RETAIL_PIE_MAX_SLICES - 1]
+    tail = items[_RETAIL_PIE_MAX_SLICES - 1 :]
+    other = sum((float(x.total_revenue) for x in tail), 0.0)
+    head.append(
+        RetailProductRevenue(
+            product_id=-1,
+            product_name=f"Khác ({len(tail)} sản phẩm)",
+            category_code="KHAC",
+            category_label="—",
+            total_revenue=Decimal(str(other)),
+        )
+    )
+    return head
 
 
 # ---------------------------------------------------------------------------

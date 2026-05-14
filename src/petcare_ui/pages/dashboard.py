@@ -4,19 +4,20 @@ Lay so lieu truc tiep tu `report_service`. Co cac thanh phan:
 - 6 the so lieu nhanh (doanh thu hom nay/thang, KH, pet, lich hen, KH moi)
 - Bo loc khoang thoi gian (hom nay / 7 ngay / 30 ngay / thang nay / tuy chinh)
 - Bieu do cot doanh thu theo ngay trong khoang loc
-- Bang Top dich vu pho bien
-- Bang Khach hang VIP
+- Bang Top dich vu pho bien, Khach VIP, Doanh so nhan vien (mac dinh 8 dong)
 """
 from __future__ import annotations
 
 from datetime import date, timedelta
 from typing import Callable
 
-from PyQt6.QtCore import QDate, Qt, QRectF
-from PyQt6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPen
+from PyQt6.QtCore import QDate, QPointF, Qt, QRect, QRectF
+from PyQt6.QtGui import QBrush, QColor, QFont, QLinearGradient, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import (
     QComboBox,
     QDateEdit,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -24,6 +25,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -36,6 +38,10 @@ from src.petcare_backend.services.report_service import (
     DailyRevenue,
     DashboardOverview,
     EmployeePerformance,
+    ReportError,
+    RetailCategory,
+    RetailCategoryDailyPoint,
+    RetailProductRevenue,
     ServiceStat,
     VipCustomer,
 )
@@ -44,11 +50,30 @@ from ..theme import THEME
 from ..widgets import Card, page_header
 
 
+# So ban ghi hien thi o bang: dich vu pho bien, khach VIP, doanh so nhan vien
+DASHBOARD_RANK_ROWS = 8
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 _VND = report_service.format_vnd
+
+
+def _sync_rank_table_height(table: QTableWidget) -> None:
+    """Chieu cao bang xep hang du cho DASHBOARD_RANK_ROWS hang (cuon ca trang, khong cuon trong bang)."""
+    hdr = table.horizontalHeader()
+    hdr_h = max(hdr.sizeHint().height(), 36)
+    if table.rowCount() > 0:
+        table.resizeRowsToContents()
+        sample_h = max(30, min(44, table.rowHeight(0)))
+    else:
+        sample_h = 34
+    for r in range(table.rowCount()):
+        table.setRowHeight(r, sample_h)
+    table.setMinimumHeight(int(hdr_h + DASHBOARD_RANK_ROWS * sample_h + 8))
+    table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
 
 def _stat_card(title: str, color: str) -> tuple[QFrame, QLabel]:
@@ -85,7 +110,7 @@ class RevenueBarChart(QWidget):
         super().__init__(parent)
         self._data: list[DailyRevenue] = []
         self.setMinimumHeight(240)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
     def set_data(self, data: list[DailyRevenue]) -> None:
         self._data = list(data)
@@ -179,6 +204,300 @@ class RevenueBarChart(QWidget):
         painter.end()
 
 
+# ---------------------------------------------------------------------------
+# Bieu do duong: ban le do an vs phu kien theo ngay
+# ---------------------------------------------------------------------------
+
+
+class RetailCategoryLineChart(QWidget):
+    """Hai duong: doanh thu do an (cam) va phu kien (xanh) theo tung ngay."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._data: list[RetailCategoryDailyPoint] = []
+        self.setMinimumHeight(280)
+        self.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+
+    def set_data(self, data: list[RetailCategoryDailyPoint]) -> None:
+        self._data = list(data)
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        rect = self.rect()
+        margin_left = 58
+        margin_right = 16
+        margin_top = 34
+        margin_bottom = 44
+
+        chart_x = margin_left
+        chart_y = margin_top
+        chart_w = max(0, rect.width() - margin_left - margin_right)
+        chart_h = max(0, rect.height() - margin_top - margin_bottom)
+
+        if not self._data:
+            painter.setPen(QColor(100, 116, 139))
+            painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "Chưa có dữ liệu trong khoảng")
+            painter.end()
+            return
+
+        max_v = max(
+            max(float(p.do_an), float(p.phu_kien)) for p in self._data
+        )
+        if max_v <= 0:
+            painter.setPen(QColor(100, 116, 139))
+            painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            painter.drawText(
+                rect,
+                Qt.AlignmentFlag.AlignCenter,
+                "Không có doanh thu bán lẻ trong khoảng",
+            )
+            painter.end()
+            return
+
+        # Chuc thich (goc phai tren vung bieu do)
+        lx = chart_x + chart_w - 132
+        ly = chart_y - 26
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(THEME.stat_orange))
+        painter.drawRoundedRect(int(lx), int(ly), 10, 10, 2, 2)
+        painter.setPen(QColor(THEME.text))
+        painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        painter.drawText(int(lx + 14), int(ly + 9), "Đồ ăn")
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(THEME.accent))
+        painter.drawRoundedRect(int(lx + 62), int(ly), 10, 10, 2, 2)
+        painter.setPen(QColor(THEME.text))
+        painter.drawText(int(lx + 76), int(ly + 9), "Phụ kiện")
+
+        painter.setPen(QPen(QColor("#E2E8F0"), 1))
+        painter.drawLine(chart_x, chart_y + chart_h, chart_x + chart_w, chart_y + chart_h)
+        painter.drawLine(chart_x, chart_y, chart_x, chart_y + chart_h)
+
+        painter.setPen(QPen(QColor("#EEF2F7"), 1, Qt.PenStyle.DashLine))
+        painter.setFont(QFont("Segoe UI", 8))
+        for i in range(1, 5):
+            y = chart_y + chart_h - int(chart_h * i / 4)
+            painter.drawLine(chart_x, y, chart_x + chart_w, y)
+            val = max_v * i / 4
+            painter.setPen(QColor(100, 116, 139))
+            painter.drawText(
+                0,
+                y - 8,
+                margin_left - 6,
+                16,
+                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                _compact_money(val),
+            )
+            painter.setPen(QPen(QColor("#EEF2F7"), 1, Qt.PenStyle.DashLine))
+
+        n = len(self._data)
+        pts_do: list[QPointF] = []
+        pts_pk: list[QPointF] = []
+        for i in range(n):
+            if n == 1:
+                x = float(chart_x + chart_w / 2)
+            else:
+                x = float(chart_x + chart_w * i / (n - 1))
+            d = float(self._data[i].do_an)
+            pk = float(self._data[i].phu_kien)
+            y_do = float(chart_y + chart_h - (d / max_v) * chart_h)
+            y_pk = float(chart_y + chart_h - (pk / max_v) * chart_h)
+            pts_do.append(QPointF(x, y_do))
+            pts_pk.append(QPointF(x, y_pk))
+
+        painter.setPen(QPen(QColor(THEME.stat_orange), 2.5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPolyline(QPolygonF(pts_do))
+        painter.setPen(QPen(QColor(THEME.accent), 2.5))
+        painter.drawPolyline(QPolygonF(pts_pk))
+
+        r = 3.5
+        painter.setBrush(QColor(THEME.stat_orange))
+        painter.setPen(QPen(QColor(255, 255, 255, 200), 1))
+        for pt in pts_do:
+            painter.drawEllipse(pt, r, r)
+        painter.setBrush(QColor(THEME.accent))
+        for pt in pts_pk:
+            painter.drawEllipse(pt, r, r)
+
+        # Nhan truc hoanh
+        painter.setPen(QColor(71, 85, 105))
+        painter.setFont(QFont("Segoe UI", 8))
+        step_x = max(1, n // 8) if n > 8 else 1
+        for i in range(0, n, step_x):
+            if n == 1:
+                cx = chart_x + chart_w / 2
+            else:
+                cx = chart_x + chart_w * i / (n - 1)
+            painter.drawText(
+                int(cx - 24),
+                chart_y + chart_h + 6,
+                48,
+                18,
+                int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop),
+                self._data[i].day.strftime("%d/%m"),
+            )
+
+        painter.end()
+
+
+# ---------------------------------------------------------------------------
+# Bieu do tron: ban le chi tiet theo san pham (do an / phu kien)
+# ---------------------------------------------------------------------------
+
+
+def _vary_category_color(base: QColor, idx: int, n: int) -> QColor:
+    """Bien the sac do trong cung nhom (do an hoac phu kien)."""
+    if n <= 1:
+        return QColor(base)
+    step = int(20 * idx / max(n - 1, 1))
+    return base.lighter(108 + step)
+
+
+def _colors_for_retail_rows(items: list[RetailProductRevenue]) -> list[QColor]:
+    n_do = sum(1 for i in items if i.category_code == "DO_AN")
+    n_pk = sum(1 for i in items if i.category_code == "PHU_KIEN")
+    i_do = i_pk = 0
+    out: list[QColor] = []
+    for it in items:
+        if it.category_code == "KHAC":
+            out.append(QColor("#94A3B8"))
+        elif it.category_code == "DO_AN":
+            out.append(_vary_category_color(QColor(THEME.stat_orange), i_do, max(n_do, 1)))
+            i_do += 1
+        else:
+            out.append(_vary_category_color(QColor(THEME.accent), i_pk, max(n_pk, 1)))
+            i_pk += 1
+    return out
+
+
+class _PieCanvas(QWidget):
+    """Ve hinh tron tu (gia tri, mau)."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._segments: list[tuple[float, QColor]] = []
+        self.setFixedSize(258, 258)
+
+    def set_segments(self, segments: list[tuple[float, QColor]]) -> None:
+        self._segments = list(segments)
+        self.update()
+
+    def paintEvent(self, _event) -> None:  # type: ignore[override]
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        if not self._segments:
+            painter.setPen(QColor(100, 116, 139))
+            painter.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            painter.drawText(
+                self.rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                "Chưa có dữ liệu bán lẻ trong khoảng",
+            )
+            painter.end()
+            return
+        total = sum(s[0] for s in self._segments)
+        if total <= 0:
+            painter.end()
+            return
+        m = 8
+        side = min(self.width(), self.height()) - 2 * m
+        side = max(side, 80)
+        x0 = (self.width() - side) // 2
+        y0 = (self.height() - side) // 2
+        rect = QRect(x0, y0, side, side)
+        angle = 90 * 16
+        for val, color in self._segments:
+            span = int(round(16 * 360 * val / total))
+            if span <= 0:
+                continue
+            painter.setPen(QPen(QColor(255, 255, 255, 210), 2))
+            painter.setBrush(QBrush(color))
+            painter.drawPie(rect, angle, -span)
+            angle -= span
+        painter.end()
+
+
+class RetailProductPieChart(QWidget):
+    """Tron + chu thich cuon: moi mat hang mot slice, mau theo nhom do an / phu kien."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._canvas = _PieCanvas(self)
+        self._scroll = QScrollArea()
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._scroll.setMinimumHeight(280)
+        self._scroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        self._legend_root = QWidget()
+        self._legend_lay = QVBoxLayout(self._legend_root)
+        self._legend_lay.setContentsMargins(4, 0, 0, 0)
+        self._legend_lay.setSpacing(4)
+        self._legend_lay.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._scroll.setWidget(self._legend_root)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
+        row.addWidget(self._canvas, 0, Qt.AlignmentFlag.AlignTop)
+        row.addWidget(self._scroll, 1)
+
+        self.setMinimumHeight(300)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+    def set_data(self, items: list[RetailProductRevenue]) -> None:
+        while self._legend_lay.count():
+            it = self._legend_lay.takeAt(0)
+            w = it.widget()
+            if w is not None:
+                w.deleteLater()
+
+        if not items:
+            self._canvas.set_segments([])
+            return
+
+        vals = [float(i.total_revenue) for i in items]
+        colors = _colors_for_retail_rows(items)
+        total = sum(vals)
+        self._canvas.set_segments(list(zip(vals, colors)))
+
+        for it, color in zip(items, colors):
+            row_w = QWidget()
+            rlay = QHBoxLayout(row_w)
+            rlay.setContentsMargins(0, 2, 0, 2)
+            swatch = QFrame()
+            swatch.setFixedSize(12, 12)
+            swatch.setStyleSheet(
+                f"QFrame{{background:{color.name()};border-radius:3px;border:none;}}"
+            )
+            rlay.addWidget(swatch, 0, Qt.AlignmentFlag.AlignTop)
+            text_col = QVBoxLayout()
+            text_col.setSpacing(2)
+            name_l = QLabel(it.product_name)
+            name_l.setWordWrap(True)
+            name_l.setStyleSheet("font:600 9pt 'Segoe UI';")
+            pct = 100.0 * float(it.total_revenue) / total if total > 0 else 0.0
+            sub = QLabel(f"{it.category_label} · {_VND(it.total_revenue)} ({pct:.0f}%)")
+            sub.setStyleSheet(f"color:{THEME.muted}; font:8pt 'Segoe UI';")
+            text_col.addWidget(name_l)
+            text_col.addWidget(sub)
+            rlay.addLayout(text_col, 1)
+            self._legend_lay.addWidget(row_w)
+
+
 def _compact_money(v: float) -> str:
     """Rut gon tien cho truc bieu do: 1.2tr, 850k, 0."""
     if v <= 0:
@@ -207,9 +526,24 @@ class DashboardView(QWidget):
         super().__init__(parent)
         self.setProperty("page_key", "dashboard")
 
-        root = QVBoxLayout(self)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        content = QWidget()
+        root = QVBoxLayout(content)
         root.setContentsMargins(26, 22, 26, 22)
         root.setSpacing(16)
+        root.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(scroll)
+        scroll.setWidget(content)
 
         # Header + reload button
         refresh_btn = QPushButton("⟳ Làm mới")
@@ -307,7 +641,10 @@ class DashboardView(QWidget):
         stats.addWidget(self._card_appt_today, 1, 2)
         root.addLayout(stats)
 
-        # --- Bieu do ---
+        # --- Bieu do cot + duong ban le ---
+        charts_row = QHBoxLayout()
+        charts_row.setSpacing(14)
+
         chart_card = Card()
         chart_lay = QVBoxLayout(chart_card)
         chart_lay.setContentsMargins(18, 14, 18, 14)
@@ -316,8 +653,43 @@ class DashboardView(QWidget):
         self._chart_title.setStyleSheet("font:800 10pt 'Segoe UI';")
         chart_lay.addWidget(self._chart_title)
         self._chart = RevenueBarChart()
-        chart_lay.addWidget(self._chart, 1)
-        root.addWidget(chart_card, 1)
+        self._chart.setMinimumHeight(280)
+        self._chart.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        chart_lay.addWidget(self._chart)
+        charts_row.addWidget(chart_card, 2)
+
+        pie_card = Card()
+        pie_lay = QVBoxLayout(pie_card)
+        pie_lay.setContentsMargins(18, 14, 18, 14)
+        pie_lay.setSpacing(8)
+        self._pie_title = QLabel("Bán lẻ — đồ ăn & phụ kiện theo ngày")
+        self._pie_title.setStyleSheet("font:800 10pt 'Segoe UI';")
+        pie_lay.addWidget(self._pie_title)
+        self._retail_line = RetailCategoryLineChart()
+        pie_lay.addWidget(self._retail_line)
+        detail_row = QHBoxLayout()
+        detail_row.setSpacing(8)
+        btn_detail_style = (
+            f"QPushButton {{ padding:6px 12px; border-radius:6px; border:1px solid {THEME.border}; "
+            f"background:{THEME.surface_alt}; font:9pt 'Segoe UI'; }}"
+            f"QPushButton:hover {{ background:{THEME.primary_soft}; border-color:{THEME.primary}; }}"
+        )
+        btn_do = QPushButton("Chi tiết đồ ăn")
+        btn_do.setStyleSheet(btn_detail_style)
+        btn_do.clicked.connect(lambda: self._show_retail_detail("DO_AN"))
+        btn_pk = QPushButton("Chi tiết phụ kiện")
+        btn_pk.setStyleSheet(btn_detail_style)
+        btn_pk.clicked.connect(lambda: self._show_retail_detail("PHU_KIEN"))
+        detail_row.addWidget(btn_do)
+        detail_row.addWidget(btn_pk)
+        detail_row.addStretch(1)
+        pie_lay.addLayout(detail_row)
+        charts_row.addWidget(pie_card, 1)
+
+        root.addLayout(charts_row)
 
         # --- Bang Top dich vu + Khach VIP canh nhau ---
         bottom_grid = QGridLayout()
@@ -345,7 +717,8 @@ class DashboardView(QWidget):
         self._svc_table = QTableWidget(0, 4)
         self._svc_table.setHorizontalHeaderLabels(["#", "Dịch vụ", "Số lượng", "Doanh thu"])
         _prepare_table(self._svc_table)
-        svc_lay.addWidget(self._svc_table, 1)
+        _sync_rank_table_height(self._svc_table)
+        svc_lay.addWidget(self._svc_table)
         bottom_grid.addWidget(svc_card, 0, 0)
 
         # VIP customers card
@@ -362,7 +735,8 @@ class DashboardView(QWidget):
             ["#", "Khách hàng", "SĐT", "Số HĐ", "Tổng chi tiêu"]
         )
         _prepare_table(self._vip_table)
-        vip_lay.addWidget(self._vip_table, 1)
+        _sync_rank_table_height(self._vip_table)
+        vip_lay.addWidget(self._vip_table)
         bottom_grid.addWidget(vip_card, 0, 1)
 
         root.addLayout(bottom_grid)
@@ -393,7 +767,8 @@ class DashboardView(QWidget):
             "Tổng doanh thu",
         ])
         _prepare_table(self._emp_table)
-        emp_lay.addWidget(self._emp_table, 1)
+        _sync_rank_table_height(self._emp_table)
+        emp_lay.addWidget(self._emp_table)
         root.addWidget(emp_card)
 
         self._apply_preset(self.PRESET_7D)
@@ -469,7 +844,7 @@ class DashboardView(QWidget):
             )
 
     def _reload_overview(self) -> None:
-        ov: DashboardOverview = report_service.dashboard_overview(top_n=5)
+        ov: DashboardOverview = report_service.dashboard_overview(top_n=DASHBOARD_RANK_ROWS)
         self._lbl_revenue_today.setText(_VND(ov.revenue_today))
         self._lbl_revenue_month.setText(_VND(ov.revenue_this_month))
         self._lbl_customers.setText(str(ov.total_customers))
@@ -491,15 +866,48 @@ class DashboardView(QWidget):
             f"{summary.invoice_count} hoá đơn • TB {_VND(summary.avg_invoice)}/HĐ"
         )
 
+        daily_cat = report_service.retail_category_revenue_by_day(start, end)
+        self._retail_line.set_data(daily_cat)
+        self._pie_title.setText(
+            f"Bán lẻ — đồ ăn & phụ kiện — {start.strftime('%d/%m/%Y')} → {end.strftime('%d/%m/%Y')}"
+        )
+
+    def _show_retail_detail(self, category: RetailCategory) -> None:
+        start, end = self._selected_range()
+        try:
+            items = report_service.retail_product_revenue_in_category(start, end, category)
+        except ReportError as exc:
+            QMessageBox.warning(self, "Chi tiết bán lẻ", str(exc))
+            return
+        if category == "DO_AN":
+            title = "Chi tiết đồ ăn (theo sản phẩm)"
+        else:
+            title = "Chi tiết phụ kiện (theo sản phẩm)"
+        dlg = QDialog(self)
+        dlg.setWindowTitle(title)
+        dlg.setMinimumSize(560, 480)
+        dl = QVBoxLayout(dlg)
+        range_lbl = QLabel(f"{start.strftime('%d/%m/%Y')} — {end.strftime('%d/%m/%Y')}")
+        range_lbl.setStyleSheet(f"color:{THEME.muted}; font:9pt 'Segoe UI';")
+        dl.addWidget(range_lbl)
+        pie = RetailProductPieChart()
+        pie.set_data(items)
+        dl.addWidget(pie)
+        box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        box.rejected.connect(dlg.reject)
+        dl.addWidget(box)
+        dlg.exec()
+
     def _reload_top_services(self) -> None:
         by = self._svc_by_combo.currentData() or "quantity"
         start, end = self._selected_range()
-        items = report_service.top_services(limit=5, by=by, start=start, end=end)
+        items = report_service.top_services(limit=DASHBOARD_RANK_ROWS, by=by, start=start, end=end)
         if not items:
-            items = report_service.top_services(limit=5, by=by)
+            items = report_service.top_services(limit=DASHBOARD_RANK_ROWS, by=by)
         self._fill_services_table(items)
 
     def _fill_services_table(self, items: list[ServiceStat]) -> None:
+        self._svc_table.clearSpans()
         self._svc_table.setRowCount(len(items))
         for r, s in enumerate(items):
             self._svc_table.setItem(r, 0, _cell(str(r + 1), center=True))
@@ -510,19 +918,22 @@ class DashboardView(QWidget):
             self._svc_table.setRowCount(1)
             self._svc_table.setSpan(0, 0, 1, self._svc_table.columnCount())
             self._svc_table.setItem(0, 0, _cell("Chưa có dữ liệu", center=True, muted=True))
+        self._svc_table.resizeRowsToContents()
+        _sync_rank_table_height(self._svc_table)
 
     def _reload_vip(self) -> None:
         start, end = self._selected_range()
         stats = report_service.customer_stats(
-            vip_limit=5, vip_period=(start, end)
+            vip_limit=DASHBOARD_RANK_ROWS, vip_period=(start, end)
         )
         items: list[VipCustomer] = list(stats.vip_customers)
         if not items:
-            stats2 = report_service.customer_stats(vip_limit=5)
+            stats2 = report_service.customer_stats(vip_limit=DASHBOARD_RANK_ROWS)
             items = list(stats2.vip_customers)
         self._fill_vip_table(items)
 
     def _fill_vip_table(self, items: list[VipCustomer]) -> None:
+        self._vip_table.clearSpans()
         self._vip_table.setRowCount(len(items))
         for r, v in enumerate(items):
             self._vip_table.setItem(r, 0, _cell(str(r + 1), center=True))
@@ -534,6 +945,8 @@ class DashboardView(QWidget):
             self._vip_table.setRowCount(1)
             self._vip_table.setSpan(0, 0, 1, self._vip_table.columnCount())
             self._vip_table.setItem(0, 0, _cell("Chưa có dữ liệu", center=True, muted=True))
+        self._vip_table.resizeRowsToContents()
+        _sync_rank_table_height(self._vip_table)
 
     def _reload_employees(self) -> None:
         start, end = self._selected_range()
@@ -542,18 +955,19 @@ class DashboardView(QWidget):
         non_zero = [e for e in items if e.total_revenue or e.appointment_count]
         if not non_zero:
             fallback = report_service.employee_performance_stats()
-            items = list(fallback.employees)
+            items = list(fallback.employees)[:DASHBOARD_RANK_ROWS]
             self._emp_summary.setText(
                 "(không có dữ liệu trong khoảng — hiển thị toàn thời gian)"
             )
         else:
-            items = non_zero
+            items = non_zero[:DASHBOARD_RANK_ROWS]
             self._emp_summary.setText(
                 f"Tổng doanh thu NV: {_VND(report.total_revenue)}"
             )
         self._fill_employee_table(items)
 
     def _fill_employee_table(self, items: list[EmployeePerformance]) -> None:
+        self._emp_table.clearSpans()
         self._emp_table.setRowCount(len(items))
         for r, e in enumerate(items):
             self._emp_table.setItem(r, 0, _cell(str(r + 1), center=True))
@@ -575,6 +989,8 @@ class DashboardView(QWidget):
             self._emp_table.setItem(
                 0, 0, _cell("Chưa có dữ liệu nhân viên", center=True, muted=True)
             )
+        self._emp_table.resizeRowsToContents()
+        _sync_rank_table_height(self._emp_table)
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +1001,8 @@ def _prepare_table(t: QTableWidget) -> None:
     t.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     t.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
     t.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+    t.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    t.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     t.verticalHeader().setVisible(False)
     t.setAlternatingRowColors(True)
     hdr = t.horizontalHeader()

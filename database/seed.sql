@@ -56,6 +56,41 @@ INSERT INTO appointment_service (appointment_id, service_id, quantity, unit_pric
     (1, 5, 1, 50000),
     (2, 2, 1, 250000);
 
+-- ---------- Lich hen da hoan thanh + hoa don DA_TT (de dashboard / bao cao co du lieu) ----------
+INSERT INTO appointment (customer_id, pet_id, employee_id, scheduled_at, status, note) VALUES
+    (1, 1, 2, DATE_SUB(NOW(), INTERVAL 2 DAY),  'HOAN_THANH', N'Hoàn thành — tắm + cắt móng'),
+    (2, 3, 2, DATE_SUB(NOW(), INTERVAL 4 DAY),  'HOAN_THANH', NULL),
+    (3, 4, 2, DATE_SUB(NOW(), INTERVAL 6 DAY),  'HOAN_THANH', NULL);
+
+INSERT INTO appointment_service (appointment_id, service_id, quantity, unit_price) VALUES
+    (3, 1, 1, 150000),
+    (3, 5, 1, 50000),
+    (4, 2, 1, 250000),
+    (5, 3, 1, 200000);
+
+INSERT INTO invoice (
+    appointment_id, customer_id, invoice_type, invoice_no, issued_at,
+    subtotal_amount, discount_amount, tax_amount, total_amount,
+    payment_status, created_by, note
+) VALUES
+    (3, 1, 'SERVICE', 'INV-DV-SEED-001', DATE_SUB(NOW(), INTERVAL 2 DAY),
+     200000, 0, 0, 200000, 'DA_TT', 2, NULL),
+    (4, 2, 'SERVICE', 'INV-DV-SEED-002', DATE_SUB(NOW(), INTERVAL 4 DAY),
+     250000, 0, 0, 250000, 'DA_TT', 2, NULL),
+    (5, 3, 'SERVICE', 'INV-DV-SEED-003', DATE_SUB(NOW(), INTERVAL 6 DAY),
+     200000, 0, 0, 200000, 'DA_TT', 2, NULL);
+
+INSERT INTO invoice_item (invoice_id, service_id, product_id, item_type, pet_id, quantity, unit_price) VALUES
+    (1, 1, NULL, 'SERVICE', 1, 1, 150000),
+    (1, 5, NULL, 'SERVICE', 1, 1, 50000),
+    (2, 2, NULL, 'SERVICE', 3, 1, 250000),
+    (3, 3, NULL, 'SERVICE', 4, 1, 200000);
+
+INSERT INTO payment (invoice_id, amount, method, paid_at, created_by) VALUES
+    (1, 200000, 'TIEN_MAT', DATE_SUB(NOW(), INTERVAL 2 DAY),  2),
+    (2, 250000, 'TIEN_MAT', DATE_SUB(NOW(), INTERVAL 4 DAY),  2),
+    (3, 200000, 'CHUYEN_KHOAN', DATE_SUB(NOW(), INTERVAL 6 DAY), 2);
+
 -- ---------- product (do an / phu kien) ----------
 INSERT INTO product (name, category, sku, price, stock, description, is_active) VALUES
     (N'Hạt Royal Canin Adult 1kg', 'DO_AN',    'RC-ADL-1KG',  220000, 30,  N'Thức ăn hạt cho chó trưởng thành', 1),
@@ -66,3 +101,18 @@ INSERT INTO product (name, category, sku, price, stock, description, is_active) 
     (N'Lồng vận chuyển size M',    'PHU_KIEN', 'CG-M',        450000, 8,   N'Lồng nhựa di chuyển thú cưng',     1),
     (N'Bát ăn inox đôi',           'PHU_KIEN', 'BW-IN-2',     95000,  50,  N'Bát ăn inox kèm đế cao su',        1),
     (N'Sữa tắm bưởi Bio 250ml',    'PHU_KIEN', 'SH-BIO-250',  130000, 35,  N'Sữa tắm hương bưởi cho thú cưng',  1);
+
+-- Hoa don ban le (sau khi da co bang product)
+INSERT INTO invoice (
+    appointment_id, customer_id, invoice_type, invoice_no, issued_at,
+    subtotal_amount, discount_amount, tax_amount, total_amount,
+    payment_status, created_by, note
+) VALUES
+    (NULL, 1, 'RETAIL', 'INV-BL-SEED-001', DATE_SUB(NOW(), INTERVAL 1 DAY),
+     220000, 0, 0, 220000, 'DA_TT', 2, N'Mua hạt demo');
+
+INSERT INTO invoice_item (invoice_id, service_id, product_id, item_type, pet_id, quantity, unit_price) VALUES
+    (4, NULL, 1, 'PRODUCT', NULL, 1, 220000);
+
+INSERT INTO payment (invoice_id, amount, method, paid_at, created_by) VALUES
+    (4, 220000, 'TIEN_MAT', DATE_SUB(NOW(), INTERVAL 1 DAY), 2);
