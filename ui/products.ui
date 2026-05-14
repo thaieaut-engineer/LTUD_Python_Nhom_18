@@ -118,48 +118,47 @@ border-radius: 16px;
        <number>0</number>
       </property>
       <item>
-       <widget class="QTableWidget" name="productsTable">
-        <property name="columnCount">
-         <number>7</number>
+       <widget class="QScrollArea" name="productsScrollArea">
+        <property name="frameShape">
+         <enum>QFrame::Shape::NoFrame</enum>
         </property>
-        <attribute name="horizontalHeaderDefaultSectionSize">
-         <number>140</number>
-        </attribute>
-        <column>
-         <property name="text">
-          <string>Tên sản phẩm</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Loại</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>SKU</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Giá</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Tồn kho</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Mô tả</string>
-         </property>
-        </column>
-        <column>
-         <property name="text">
-          <string>Thao tác</string>
-         </property>
-        </column>
+        <property name="widgetResizable">
+         <bool>true</bool>
+        </property>
+        <property name="horizontalScrollBarPolicy">
+         <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+        </property>
+        <property name="verticalScrollBarPolicy">
+         <enum>Qt::ScrollBarPolicy::ScrollBarAsNeeded</enum>
+        </property>
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>320</height>
+         </size>
+        </property>
+        <widget class="QWidget" name="productsGridContainer">
+         <layout class="QGridLayout" name="productsGridLayout">
+          <property name="leftMargin">
+           <number>14</number>
+          </property>
+          <property name="topMargin">
+           <number>14</number>
+          </property>
+          <property name="rightMargin">
+           <number>14</number>
+          </property>
+          <property name="bottomMargin">
+           <number>14</number>
+          </property>
+          <property name="horizontalSpacing">
+           <number>14</number>
+          </property>
+          <property name="verticalSpacing">
+           <number>14</number>
+          </property>
+         </layout>
+        </widget>
        </widget>
       </item>
      </layout>

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QDateTime, QEvent, QSize
+from PyQt6.QtCore import Qt, QDateTime, QEvent, QObject, QSize, QTimer
 from PyQt6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QSizePolicy,
     QPlainTextEdit,
     QStackedWidget,
     QTableWidget,
@@ -49,6 +50,30 @@ from src.petcare_backend.session import Session
 
 APPOINTMENT_STATUSES = ("Chờ xử lý", "Đang thực hiện", "Hoàn thành", "Hủy")
 
+# Nut thao tac trong bang nhan vien: global QPushButton co min-height 34px + padding lon;
+# dat trong QTableWidget de bi cat neu hang khong du cao — gon lai va can giua doc.
+_EMPLOYEE_ROW_BTN_QSS = f"""
+QPushButton {{
+  background: #FFFFFF;
+  border: 1px solid {THEME.border};
+  border-radius: 8px;
+  padding: 4px 10px;
+  color: {THEME.text};
+  font: 600 9pt 'Segoe UI';
+  min-height: 24px;
+  max-height: 30px;
+}}
+QPushButton:hover {{
+  background: {THEME.surface_alt};
+  border: 1px solid {THEME.primary};
+  color: {THEME.primary};
+}}
+QPushButton:pressed {{
+  background: {THEME.primary_soft};
+  border: 1px solid {THEME.primary};
+}}
+"""
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -56,6 +81,15 @@ def _repo_root() -> Path:
 
 def _ui_path(name: str) -> str:
     return str(_repo_root() / "ui" / name)
+
+
+def _clear_grid_layout(grid: QGridLayout) -> None:
+    while grid.count():
+        item = grid.takeAt(0)
+        w = item.widget()
+        if w is not None:
+            w.setParent(None)
+            w.deleteLater()
 
 
 _ACTION_ICON_PIX = 20
@@ -233,23 +267,30 @@ def _build_action_button(
     return btn
 
 
-def _wrap_action_buttons(buttons: list[QPushButton]) -> QWidget:
+def _wrap_action_buttons(
+    buttons: list[QPushButton],
+    *,
+    trailing_stretch: bool = True,
+    margins: tuple[int, int, int, int] = (8, 4, 8, 4),
+) -> QWidget:
     """Goi list nut action vao 1 QWidget can chinh san sang gan vao QTableWidget.
 
     Tinh san minimumSize de QHeaderView::ResizeToContents lam viec dung.
     """
     w = QWidget()
     lay = QHBoxLayout(w)
-    lay.setContentsMargins(8, 4, 8, 4)
+    m_l, m_t, m_r, m_b = margins
+    lay.setContentsMargins(m_l, m_t, m_r, m_b)
     lay.setSpacing(8)
-    total_w = 16
+    total_w = m_l + m_r
     max_h = 0
     for b in buttons:
         lay.addWidget(b, 0, Qt.AlignmentFlag.AlignVCenter)
         total_w += b.minimumWidth() + 8
         max_h = max(max_h, b.minimumHeight())
-    lay.addStretch(1)
-    w.setMinimumSize(total_w, max_h + 8)
+    if trailing_stretch:
+        lay.addStretch(1)
+    w.setMinimumSize(max(total_w, 60), max_h + m_t + m_b)
     return w
 
 
@@ -321,9 +362,10 @@ class PetCareApp(QMainWindow):
         # demo list cu - da thay bang DB rows (_appointments_rows)
         self._demo_appointments: list[dict[str, str | list[str]]] = []
         self._pet_images: dict[tuple[int, int], str] = {}
+        self._product_images: dict[int, str] = {}
         self._customers: list[Customer] = []
         self._pets: list[Pet] = []
-        self._pets_thumb: int = 72
+        self._pets_thumb: int = 56
         self._services_list: list[Service] = []
         self._products_list: list[Product] = []
         self._employees_list: list = []
@@ -331,6 +373,7 @@ class PetCareApp(QMainWindow):
         self._per_pet_service_container: QWidget | None = None
         self._per_pet_service_rows_layout: QVBoxLayout | None = None
         self._per_pet_service_combos: dict[str, QComboBox] = {}
+        self._products_viewport: QWidget | None = None
 
         self._bg_path: str = background_image_path()
 
@@ -351,6 +394,15 @@ class PetCareApp(QMainWindow):
         self._set_active("dashboard")
         # Chi khoi tao UI pages; du lieu se load tu MySQL sau khi dang nhap thanh cong.
         self._init_catalog_pages()
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # type: ignore[override]
+        if (
+            self._products_viewport is not None
+            and obj is self._products_viewport
+            and event.type() == QEvent.Type.Resize
+        ):
+            self._sync_products_grid_metrics()
+        return super().eventFilter(obj, event)
 
     def _install_pet_background(
         self,
@@ -515,8 +567,14 @@ class PetCareApp(QMainWindow):
 
         products_page = self._pages.get("products")
         if products_page:
-            table: QTableWidget = products_page.productsTable
-            self._setup_table(table)
+            if hasattr(products_page, "productsScrollArea"):
+                psa: QScrollArea = products_page.productsScrollArea
+                # widgetResizable(True) keo cao bang viewport -> QGridLayout dan doc hang,
+                # thẻ neo tren nhung o noi dung bi gian -> lech hang / khoang trong lon.
+                psa.setWidgetResizable(False)
+                psa.setFrameShape(QFrame.Shape.NoFrame)
+                self._products_viewport = psa.viewport()
+                self._products_viewport.installEventFilter(self)
             if hasattr(products_page, "addProductButton"):
                 products_page.addProductButton.clicked.connect(self._on_add_product_clicked)
             if hasattr(products_page, "categoryFilterCombo"):
@@ -533,6 +591,24 @@ class PetCareApp(QMainWindow):
 
         pets_page = self._pages.get("pets")
         if pets_page:
+            if hasattr(pets_page, "petsTable"):
+                ptable: QTableWidget = pets_page.petsTable
+                self._setup_table(ptable)
+                ptable.setColumnCount(7)
+                ptable.setHorizontalHeaderLabels(
+                    ["Ảnh", "Tên", "Loài", "Giống", "Tuổi", "Chủ", "Thao tác"]
+                )
+                ph = ptable.horizontalHeader()
+                ph.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+                ptable.setColumnWidth(0, 76)
+                ph.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+                ph.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+                ph.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+                ph.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+                ph.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+                ph.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
+                ptable.setColumnWidth(6, 230)
+                ptable.cellDoubleClicked.connect(self._on_pet_image_double_clicked)
             pets_page.customerFilterCombo.currentIndexChanged.connect(lambda _: self._reload_pets())
             pets_page.addPetButton.clicked.connect(self._on_add_pet_clicked)
 
@@ -587,6 +663,9 @@ class PetCareApp(QMainWindow):
         if emp_page:
             table: QTableWidget = emp_page.employeesTable
             self._setup_table(table)
+            evh = table.verticalHeader()
+            evh.setDefaultSectionSize(64)
+            evh.setMinimumSectionSize(62)
             if hasattr(emp_page, "searchEdit"):
                 emp_page.searchEdit.textChanged.connect(lambda _: self._render_employees_table())
             if hasattr(emp_page, "addEmployeeButton"):
@@ -2244,6 +2323,14 @@ class PetCareApp(QMainWindow):
                 self._make_employee_row_actions(e),
             )
 
+        for r in range(table.rowCount()):
+            table.resizeRowToContents(r)
+            cw = table.cellWidget(r, 6)
+            if cw is not None:
+                need = cw.sizeHint().height() + 12
+                if table.rowHeight(r) < need:
+                    table.setRowHeight(r, need)
+
         hdr = table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
@@ -2258,31 +2345,36 @@ class PetCareApp(QMainWindow):
         """Tao cum nut hanh dong cho 1 nhan vien."""
         wrap = QWidget()
         h = QHBoxLayout(wrap)
-        h.setContentsMargins(4, 2, 4, 2)
+        h.setContentsMargins(8, 6, 8, 6)
         h.setSpacing(6)
+        h.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         btn_detail = QPushButton("Chi tiết")
+        btn_detail.setStyleSheet(_EMPLOYEE_ROW_BTN_QSS)
         btn_detail.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_detail.clicked.connect(lambda _=False, eid=emp.employee_id: self._show_employee_detail_dialog(eid))
-        h.addWidget(btn_detail)
+        h.addWidget(btn_detail, 0, Qt.AlignmentFlag.AlignVCenter)
 
         btn_edit = QPushButton("Sửa")
+        btn_edit.setStyleSheet(_EMPLOYEE_ROW_BTN_QSS)
         btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_edit.clicked.connect(lambda _=False, eid=emp.employee_id: self._on_edit_employee_clicked(eid))
-        h.addWidget(btn_edit)
+        h.addWidget(btn_edit, 0, Qt.AlignmentFlag.AlignVCenter)
 
         btn_pw = QPushButton("Reset MK")
+        btn_pw.setStyleSheet(_EMPLOYEE_ROW_BTN_QSS)
         btn_pw.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_pw.clicked.connect(lambda _=False, eid=emp.employee_id: self._on_reset_employee_password(eid))
-        h.addWidget(btn_pw)
+        h.addWidget(btn_pw, 0, Qt.AlignmentFlag.AlignVCenter)
 
         btn_lock = QPushButton("Khoá" if emp.is_active else "Mở khoá")
+        btn_lock.setStyleSheet(_EMPLOYEE_ROW_BTN_QSS)
         btn_lock.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_lock.clicked.connect(
             lambda _=False, eid=emp.employee_id, active=emp.is_active:
             self._on_toggle_employee_active(eid, active)
         )
-        h.addWidget(btn_lock)
+        h.addWidget(btn_lock, 0, Qt.AlignmentFlag.AlignVCenter)
 
         h.addStretch(1)
         return wrap
@@ -2616,44 +2708,222 @@ class PetCareApp(QMainWindow):
             self._products_list = []
         self._render_products_table()
 
+    def _sync_products_grid_metrics(self) -> None:
+        """O luoi san pham: 6 cot bang nhau (theo viewport), hang co chieu cao da set san."""
+        products_page = self._pages.get("products")
+        if not products_page or not self._products_list:
+            return
+        grid = getattr(products_page, "productsGridLayout", None)
+        container = getattr(products_page, "productsGridContainer", None)
+        sa: QScrollArea | None = getattr(products_page, "productsScrollArea", None)
+        if grid is None or container is None:
+            return
+        cols = 6
+        cell_floor = 170
+        sp = grid.horizontalSpacing()
+        mg = grid.contentsMargins()
+        base_min = cols * cell_floor + max(0, cols - 1) * sp + mg.left() + mg.right()
+        vw = sa.viewport().width() if sa is not None else 0
+        w = max(base_min, vw, container.minimumWidth())
+        container.setMinimumWidth(w)
+        inner = w - mg.left() - mg.right() - max(0, cols - 1) * sp
+        col_w = max(cell_floor, inner // cols)
+        for c in range(cols):
+            grid.setColumnMinimumWidth(c, col_w)
+            grid.setColumnStretch(c, 1)
+        grid.invalidate()
+        container.updateGeometry()
+
     def _render_products_table(self) -> None:
         products_page = self._pages.get("products")
-        if not products_page or not hasattr(products_page, "productsTable"):
+        if not products_page or not hasattr(products_page, "productsGridLayout"):
             return
-        table: QTableWidget = products_page.productsTable
+
+        grid: QGridLayout = products_page.productsGridLayout
+        _clear_grid_layout(grid)
+
         rows = self._products_list
-        table.setRowCount(len(rows))
-        for r, p in enumerate(rows):
-            table.setItem(r, 0, QTableWidgetItem(p.name))
-            cat_label = product_service.CATEGORY_LABELS.get(p.category, p.category)
-            table.setItem(r, 1, QTableWidgetItem(cat_label))
-            table.setItem(r, 2, QTableWidgetItem(p.sku or ""))
-            table.setItem(r, 3, QTableWidgetItem(f"{int(p.price):,}đ".replace(",", ".")))
-            stock_item = QTableWidgetItem(str(p.stock))
-            if p.stock <= 0:
-                stock_item.setForeground(QColor("#B91C1C"))
-            elif p.stock < 5:
-                stock_item.setForeground(QColor("#B45309"))
-            table.setItem(r, 4, stock_item)
-            table.setItem(r, 5, QTableWidgetItem(p.description or ""))
-            table.setCellWidget(
-                r,
-                6,
-                self._make_row_actions(
-                    on_edit=lambda _, pid=p.id: self._on_edit_product_clicked(pid),
-                    on_delete=lambda _, pid=p.id: self._on_delete_product_clicked(pid),
-                    delete_text="Ẩn",
-                ),
+        thumb = 92
+
+        if not rows:
+            empty = QLabel("Chưa có sản phẩm nào (hoặc không khớp bộ lọc).")
+            empty.setStyleSheet("color:#64748B; font:700 10pt 'Segoe UI'; padding: 28px;")
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            grid.addWidget(empty, 0, 0, 1, 6)
+            if hasattr(products_page, "productsGridContainer"):
+                products_page.productsGridContainer.setMinimumWidth(0)
+            return
+
+        cols = 6
+        cell_min = 170
+        for c in range(cols):
+            grid.setColumnStretch(c, 1)
+
+        card_refs: list[QFrame] = []
+
+        for idx, p in enumerate(rows):
+            card = QFrame()
+            card.setObjectName("ProdCard")
+            card.setStyleSheet(
+                f"QFrame#ProdCard{{background:#FFFFFF; border:1px solid {THEME.border}; border-radius:12px;}}"
+                f"QFrame#ProdCard QLabel{{border:none; margin:0; padding:0; background:transparent;}}"
+            )
+            card.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Fixed,
             )
 
-        hdr = table.horizontalHeader()
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        hdr.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+            row_lay = QHBoxLayout(card)
+            row_lay.setContentsMargins(10, 8, 10, 8)
+            row_lay.setSpacing(10)
+
+            img_btn = QPushButton()
+            img_btn.setFixedSize(thumb, thumb)
+            img_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            img_btn.clicked.connect(lambda _=False, pid=p.id: self._on_product_image_pick(pid))
+            img_btn.setStyleSheet(
+                "QPushButton{background:#E8EEEB; border:1px dashed #94A3B8; border-radius:10px; font-size:30px;}"
+                "QPushButton:hover{background:#D1E8DF; border-color:" + THEME.primary + ";}"
+            )
+            img_btn.setToolTip("Chọn ảnh (lưu tạm trong phiên)")
+            ph = self._product_placeholder_emoji(p.category)
+            img_path = self._product_images.get(p.id)
+            if img_path and os.path.exists(img_path):
+                pix = QPixmap(img_path)
+                if not pix.isNull():
+                    img_btn.setIcon(QIcon(pix))
+                    img_btn.setIconSize(QSize(thumb - 6, thumb - 6))
+                    img_btn.setText("")
+            else:
+                img_btn.setText(ph)
+            row_lay.addWidget(img_btn, 0, Qt.AlignmentFlag.AlignTop)
+
+            right = QWidget()
+            right.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Expanding,
+            )
+            rv = QVBoxLayout(right)
+            rv.setContentsMargins(0, 0, 0, 0)
+            rv.setSpacing(3)
+            rv.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+            nm = QLabel(p.name)
+            nm.setObjectName("prodName")
+            nm.setWordWrap(True)
+            nm.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            nm.setStyleSheet(
+                f"font:800 10pt 'Segoe UI'; color:{THEME.text_strong}; border:none; background:transparent;"
+            )
+            rv.addWidget(nm, 0, Qt.AlignmentFlag.AlignTop)
+
+            cat_line = QLabel(product_service.CATEGORY_LABELS.get(p.category, p.category))
+            cat_line.setStyleSheet(
+                f"color:{THEME.muted}; font:9pt 'Segoe UI'; border:none; background:transparent;"
+            )
+            rv.addWidget(cat_line)
+
+            pr_lbl = QLabel(f"{int(p.price):,} đ".replace(",", "."))
+            pr_lbl.setStyleSheet(
+                f"color:{THEME.primary}; font:800 11pt 'Segoe UI'; border:none; background:transparent;"
+            )
+            rv.addWidget(pr_lbl)
+
+            sk = QLabel(f"Tồn: {p.stock}")
+            if p.stock <= 0:
+                sk.setStyleSheet(
+                    "color:#B91C1C; font:600 9pt 'Segoe UI'; border:none; background:transparent;"
+                )
+            elif p.stock < 5:
+                sk.setStyleSheet(
+                    "color:#B45309; font:600 9pt 'Segoe UI'; border:none; background:transparent;"
+                )
+            else:
+                sk.setStyleSheet(
+                    f"color:{THEME.text_soft}; font:9pt 'Segoe UI'; border:none; background:transparent;"
+                )
+            rv.addWidget(sk)
+
+            if p.sku:
+                sku_lbl = QLabel(f"SKU: {p.sku}")
+                sku_lbl.setWordWrap(True)
+                sku_lbl.setStyleSheet(
+                    f"color:{THEME.muted}; font:8pt 'Segoe UI'; border:none; background:transparent;"
+                )
+                rv.addWidget(sku_lbl)
+
+            rv.addStretch(1)
+
+            actions = self._make_row_actions(
+                on_edit=lambda _, pid=p.id: self._on_edit_product_clicked(pid),
+                on_delete=lambda _, pid=p.id: self._on_delete_product_clicked(pid),
+                delete_text="Ẩn",
+                compact_wrap=True,
+            )
+            rv.addWidget(actions, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+
+            row_lay.addWidget(right, 1, Qt.AlignmentFlag.AlignTop)
+
+            gr = idx // cols
+            gc = idx % cols
+            grid.addWidget(card, gr, gc)
+            card_refs.append(card)
+
+        nrows = (len(rows) + cols - 1) // cols
+        for r in range(nrows):
+            grid.setRowStretch(r, 0)
+            heights: list[int] = []
+            for j in range(cols):
+                i = r * cols + j
+                if i < len(card_refs):
+                    cr = card_refs[i]
+                    cr.adjustSize()
+                    heights.append(cr.sizeHint().height())
+            if heights:
+                row_h = max(heights)
+                for j in range(cols):
+                    i = r * cols + j
+                    if i < len(card_refs):
+                        card_refs[i].setFixedHeight(row_h)
+                grid.setRowMinimumHeight(r, row_h)
+
+        container = getattr(products_page, "productsGridContainer", None)
+        if container is not None:
+            container.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Minimum,
+            )
+            mg = grid.contentsMargins()
+            sp = grid.horizontalSpacing()
+            fallback_w = cols * cell_min + max(0, cols - 1) * sp + mg.left() + mg.right()
+            container.setMinimumWidth(fallback_w)
+            grid.activate()
+            container.adjustSize()
+            ch = container.sizeHint()
+            container.setMinimumHeight(max(1, ch.height()))
+            self._sync_products_grid_metrics()
+            QTimer.singleShot(0, self._sync_products_grid_metrics)
+
+    def _product_placeholder_emoji(self, category: str) -> str:
+        if category == "DO_AN":
+            return "🍖"
+        if category == "PHU_KIEN":
+            return "🎀"
+        return "🛒"
+
+    def _on_product_image_pick(self, product_id: int) -> None:
+        if next((x for x in self._products_list if x.id == product_id), None) is None:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn ảnh sản phẩm",
+            "",
+            "Images (*.png *.jpg *.jpeg *.webp)",
+        )
+        if not path:
+            return
+        self._product_images[product_id] = path
+        self._render_products_table()
 
     def _on_add_product_clicked(self) -> None:
         self._show_product_dialog(None)
@@ -2823,78 +3093,84 @@ class PetCareApp(QMainWindow):
 
     def _render_pets_table(self) -> None:
         pets_page = self._pages.get("pets")
-        if not pets_page or not hasattr(pets_page, "petsGridLayout"):
+        if not pets_page or not hasattr(pets_page, "petsTable"):
             return
 
-        grid: QGridLayout = pets_page.petsGridLayout
-        while grid.count():
-            item = grid.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)
-                w.deleteLater()
-
-        thumb = self._pets_thumb + 8
+        table: QTableWidget = pets_page.petsTable
         owner_name = {c.id: c.full_name for c in self._customers}
+        thumb = self._pets_thumb
 
         if not self._pets:
-            empty = QLabel("Chưa có thú cưng nào.")
-            empty.setStyleSheet("color:#64748B; font:700 10pt 'Segoe UI'; padding: 24px;")
-            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            grid.addWidget(empty, 0, 0, 1, 1)
+            table.clearSpans()
+            table.setRowCount(1)
+            table.setSpan(0, 0, 1, table.columnCount())
+            empty = QTableWidgetItem("Chưa có thú cưng nào.")
+            empty.setForeground(QColor("#64748B"))
+            f = empty.font()
+            f.setBold(True)
+            empty.setFont(f)
+            table.setItem(0, 0, empty)
+            table.resizeRowsToContents()
             return
 
-        cols = 4
-
-        for col in range(cols):
-            grid.setColumnStretch(col, 1)
-
-        for idx, p in enumerate(self._pets):
-            card = QFrame()
-            card.setStyleSheet(
-                "QFrame{background:#FFFFFF; border:1px solid #D6E2F7; border-radius:14px;}"
-                "QLabel#petName{font:800 11pt 'Segoe UI'; color:#0F172A;}"
-                "QLabel{color:#334155; font:10pt 'Segoe UI';}"
-            )
-            box = QVBoxLayout(card)
-            box.setContentsMargins(12, 12, 12, 12)
-            box.setSpacing(8)
-
-            img_btn = QPushButton("📷")
+        table.clearSpans()
+        table.setRowCount(len(self._pets))
+        for r, p in enumerate(self._pets):
+            wrap_img = QWidget()
+            hi = QHBoxLayout(wrap_img)
+            hi.setContentsMargins(4, 4, 4, 4)
+            hi.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            img_btn = QPushButton()
+            img_btn.setFixedSize(thumb + 6, thumb + 6)
             img_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            img_btn.setFixedSize(thumb, thumb)
-            img_btn.clicked.connect(lambda _, pid=p.id: self._on_pet_image_upload_clicked(pid))
+            img_btn.clicked.connect(
+                lambda _=False, pid=p.id: self._on_pet_image_upload_clicked(pid)
+            )
             img_btn.setStyleSheet(
-                "QPushButton{background:#E2E8F0; border:1px dashed #94A3B8; border-radius:12px; font-size:20px;}"
+                "QPushButton{background:#E2E8F0; border:1px dashed #94A3B8; border-radius:10px; font-size:18px;}"
                 "QPushButton:hover{background:#CBD5E1;}"
             )
+            img_btn.setToolTip("Chọn ảnh (hoặc double-click ô ảnh trên bảng)")
             img_path = self._pet_images.get((p.customer_id, p.id))
             if img_path and os.path.exists(img_path):
                 pix = QPixmap(img_path)
                 if not pix.isNull():
                     img_btn.setIcon(QIcon(pix))
-                    img_btn.setIconSize(QSize(thumb - 8, thumb - 8))
+                    img_btn.setIconSize(QSize(thumb, thumb))
                     img_btn.setText("")
-            box.addWidget(img_btn, 0, Qt.AlignmentFlag.AlignHCenter)
+            else:
+                img_btn.setText("📷")
+            hi.addWidget(img_btn)
+            table.setCellWidget(r, 0, wrap_img)
 
-            name = QLabel(p.name)
-            name.setObjectName("petName")
-            box.addWidget(name)
-            box.addWidget(QLabel(f"Loài: {p.species}"))
-            box.addWidget(QLabel(f"Giống: {p.breed or '—'}"))
-            box.addWidget(QLabel(f"Tuổi: {'—' if p.age is None else p.age}"))
-            box.addWidget(QLabel(f"Chủ: {owner_name.get(p.customer_id, str(p.customer_id))}"))
-
-            actions = self._make_row_actions(
-                on_edit=lambda _, pid=p.id: self._on_edit_pet_clicked(pid),
-                on_delete=lambda _, pid=p.id: self._on_delete_pet_clicked(pid),
+            name_item = QTableWidgetItem(p.name)
+            name_item.setData(Qt.ItemDataRole.UserRole, p.id)
+            table.setItem(r, 1, name_item)
+            table.setItem(r, 2, QTableWidgetItem(p.species))
+            table.setItem(r, 3, QTableWidgetItem(p.breed or "—"))
+            age_txt = "—" if p.age is None else str(p.age)
+            table.setItem(r, 4, QTableWidgetItem(age_txt))
+            table.setItem(
+                r,
+                5,
+                QTableWidgetItem(owner_name.get(p.customer_id, str(p.customer_id))),
             )
-            box.addWidget(actions)
-            box.addStretch(1)
+            table.setCellWidget(
+                r,
+                6,
+                self._make_row_actions(
+                    on_edit=lambda _, pid=p.id: self._on_edit_pet_clicked(pid),
+                    on_delete=lambda _, pid=p.id: self._on_delete_pet_clicked(pid),
+                ),
+            )
 
-            row = idx // cols
-            col = idx % cols
-            grid.addWidget(card, row, col)
+        for r2 in range(table.rowCount()):
+            table.resizeRowToContents(r2)
+            h_need = self._pets_thumb + 22
+            if table.rowHeight(r2) < h_need:
+                table.setRowHeight(r2, h_need)
+
+        table.horizontalHeader().setStretchLastSection(False)
 
     def _on_pet_image_upload_clicked(self, pet_id: int) -> None:
         pet = next((p for p in self._pets if p.id == pet_id), None)
@@ -2973,6 +3249,7 @@ class PetCareApp(QMainWindow):
         on_edit,
         on_delete,
         delete_text: str = "Xóa",
+        compact_wrap: bool = False,
     ) -> QWidget:
         if not getattr(self, "_is_admin", False):
             w = QWidget()
@@ -3004,7 +3281,11 @@ class PetCareApp(QMainWindow):
         )
         btn_del.clicked.connect(lambda: on_delete(None))
 
-        return _wrap_action_buttons([btn_edit, btn_del])
+        return _wrap_action_buttons(
+            [btn_edit, btn_del],
+            trailing_stretch=not compact_wrap,
+            margins=(0, 2, 0, 0) if compact_wrap else (8, 4, 8, 4),
+        )
 
     def _on_add_customer_clicked(self) -> None:
         dlg = QDialog(self)
@@ -3397,6 +3678,8 @@ class PetCareApp(QMainWindow):
         self._products_list = []
         self._employees_list = []
         self._employees_stats: list = []
+        self._pet_images.clear()
+        self._product_images.clear()
 
         emp_page = self._pages.get("employees")
         if emp_page and hasattr(emp_page, "employeesTable"):
@@ -3407,19 +3690,15 @@ class PetCareApp(QMainWindow):
             customers_page.customersTable.setRowCount(0)
 
         products_page = self._pages.get("products")
-        if products_page and hasattr(products_page, "productsTable"):
-            products_page.productsTable.setRowCount(0)
+        if products_page and hasattr(products_page, "productsGridLayout"):
+            _clear_grid_layout(products_page.productsGridLayout)
 
         pets_page = self._pages.get("pets")
         if pets_page:
-            if hasattr(pets_page, "petsGridLayout"):
-                grid: QGridLayout = pets_page.petsGridLayout
-                while grid.count():
-                    item = grid.takeAt(0)
-                    w = item.widget()
-                    if w is not None:
-                        w.setParent(None)
-                        w.deleteLater()
+            if hasattr(pets_page, "petsTable"):
+                pets_page.petsTable.setRowCount(0)
+            elif hasattr(pets_page, "petsGridLayout"):
+                _clear_grid_layout(pets_page.petsGridLayout)
             if hasattr(pets_page, "customerFilterCombo"):
                 pets_page.customerFilterCombo.blockSignals(True)
                 pets_page.customerFilterCombo.clear()

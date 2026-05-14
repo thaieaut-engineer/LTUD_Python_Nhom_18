@@ -103,35 +103,48 @@ border-radius: 16px;
        <number>0</number>
       </property>
       <item>
-       <widget class="QScrollArea" name="petsScrollArea">
-        <property name="frameShape">
-         <enum>QFrame::Shape::NoFrame</enum>
+       <widget class="QTableWidget" name="petsTable">
+        <property name="columnCount">
+         <number>7</number>
         </property>
-        <property name="widgetResizable">
-         <bool>true</bool>
-        </property>
-        <widget class="QWidget" name="petsGridContainer">
-         <layout class="QGridLayout" name="petsGridLayout">
-          <property name="leftMargin">
-           <number>12</number>
-          </property>
-          <property name="topMargin">
-           <number>12</number>
-          </property>
-          <property name="rightMargin">
-           <number>12</number>
-          </property>
-          <property name="bottomMargin">
-           <number>12</number>
-          </property>
-          <property name="horizontalSpacing">
-           <number>12</number>
-          </property>
-          <property name="verticalSpacing">
-           <number>12</number>
-          </property>
-         </layout>
-        </widget>
+        <attribute name="horizontalHeaderDefaultSectionSize">
+         <number>120</number>
+        </attribute>
+        <column>
+         <property name="text">
+          <string>Ảnh</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Tên</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Loài</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Giống</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Tuổi</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Chủ</string>
+         </property>
+        </column>
+        <column>
+         <property name="text">
+          <string>Thao tác</string>
+         </property>
+        </column>
        </widget>
       </item>
      </layout>
