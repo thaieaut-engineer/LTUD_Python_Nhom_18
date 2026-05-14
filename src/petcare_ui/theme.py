@@ -6,56 +6,56 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Theme:
-    # ----- Nền ứng dụng: xanh dương rất nhạt pha chút hồng -----
-    bg_app: str = "#EFF6FF"
-    text: str = "#0C1F4A"
-    text_strong: str = "#0A1A3F"
-    text_soft: str = "#334E7B"
-    muted: str = "#64748B"
+    # ----- Nền ứng dụng: xám nhạt (nhịp KiotViet / lịch) -----
+    bg_app: str = "#F4F5F7"
+    text: str = "#1F2937"
+    text_strong: str = "#111827"
+    text_soft: str = "#4B5563"
+    muted: str = "#6B7280"
 
-    # ----- Sidebar: navy sâu → xanh dương royal -----
-    sidebar_top: str = "#0B1E3F"
-    sidebar_mid: str = "#15306B"
-    sidebar_bottom: str = "#1E4FB3"
+    # ----- Sidebar / header: xanh thương hiệu -----
+    sidebar_top: str = "#006848"
+    sidebar_mid: str = "#008056"
+    sidebar_bottom: str = "#00965E"
     sidebar_item: str = "rgba(255,255,255,0.08)"
     sidebar_item_active: str = "rgba(255,255,255,0.18)"
 
-    # ----- Bề mặt: card tone ngà xanh, không phải trắng phẳng -----
+    # ----- Bề mặt -----
     card: str = "#FFFFFF"
-    surface: str = "#FDFEFF"
-    surface_alt: str = "#F1F6FF"
-    surface_pink: str = "#FFF3F8"
-    border: str = "#D6E2F7"
-    border_strong: str = "#B7CAEB"
-    border_pink: str = "#F9D6E4"
+    surface: str = "#FFFFFF"
+    surface_alt: str = "#F0F2F1"
+    surface_pink: str = "#F3F6F4"
+    border: str = "#E2E5E4"
+    border_strong: str = "#CBD0CF"
+    border_pink: str = "#D1E8DF"
 
-    # ----- Primary: Blue royal -----
-    primary: str = "#2563EB"
-    primary_hover: str = "#1D4ED8"
-    primary_pressed: str = "#1E40AF"
-    primary_left: str = "#3B82F6"
-    primary_right: str = "#60A5FA"
-    primary_soft: str = "rgba(37,99,235,0.12)"
-    focus_ring: str = "rgba(59,130,246,0.40)"
+    # ----- Primary: xanh KiotViet -----
+    primary: str = "#00965E"
+    primary_hover: str = "#007D4F"
+    primary_pressed: str = "#006B44"
+    primary_left: str = "#00B078"
+    primary_right: str = "#00965E"
+    primary_soft: str = "rgba(0,150,94,0.12)"
+    focus_ring: str = "rgba(0,150,94,0.38)"
 
-    # ----- Accent: Hồng nhạt -----
-    accent: str = "#F472B6"
-    accent_soft: str = "#FCE7F3"
-    accent_strong: str = "#EC4899"
+    # ----- Phụ: xanh footer / tab phụ -----
+    accent: str = "#005EB8"
+    accent_soft: str = "rgba(0,94,184,0.10)"
+    accent_strong: str = "#004A94"
 
     # ----- Trạng thái -----
-    danger: str = "#E11D48"
-    danger_soft: str = "#FEE2E8"
-    success: str = "#059669"
-    success_soft: str = "#D1FAE5"
+    danger: str = "#B34D52"
+    danger_soft: str = "#FCE8E9"
+    success: str = "#007D56"
+    success_soft: str = "#D1F0E8"
     warning: str = "#D97706"
     warning_soft: str = "#FEF3C7"
 
     # ----- Stat cards (Dashboard) -----
-    stat_blue: str = "#3B82F6"
-    stat_orange: str = "#F59E0B"
-    stat_green: str = "#10B981"
-    stat_pink: str = "#F472B6"
+    stat_blue: str = "#005EB8"
+    stat_orange: str = "#D97706"
+    stat_green: str = "#00965E"
+    stat_pink: str = "#B34D52"
 
 
 THEME = Theme()
@@ -72,7 +72,7 @@ def qss() -> str:
     return f"""
     /* ============ GLOBAL ============ */
     * {{
-      font-family: "Segoe UI", "Inter", "Arial";
+      font-family: "Segoe UI", "Roboto", "Open Sans", "Arial";
       color: {t.text};
     }}
 
@@ -82,12 +82,12 @@ def qss() -> str:
 
     QMainWindow, QDialog {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-          stop:0 #EAF2FF, stop:0.55 #F5F8FF, stop:1 #FFF1F6);
+          stop:0 #F4F5F7, stop:1 #EEEFEF);
     }}
 
     QToolTip {{
       background: {t.text_strong};
-      color: #F1F5FF;
+      color: #F9FAFB;
       border: 1px solid rgba(255,255,255,0.08);
       padding: 6px 10px;
       border-radius: 8px;
@@ -95,7 +95,7 @@ def qss() -> str:
     }}
 
     QWidget#AppRoot {{
-      background-color: #EFF6FF;
+      background-color: {t.bg_app};
     }}
 
     /* ============ SIDEBAR ============ */
@@ -140,8 +140,8 @@ def qss() -> str:
 
     QPushButton#NavItem[active="true"] {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 rgba(147,197,253,0.32), stop:0.7 rgba(244,114,182,0.18), stop:1 rgba(255,255,255,0.06));
-      border-left: 3px solid #93C5FD;
+          stop:0 rgba(255,255,255,0.14), stop:1 rgba(255,255,255,0.06));
+      border-left: 3px solid #7FDEC0;
       color: #FFFFFF;
       font-weight: 700;
     }}
@@ -315,17 +315,16 @@ def qss() -> str:
       color: #FFFFFF;
       font-weight: 700;
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 #2563EB, stop:0.6 #3B82F6, stop:1 #F472B6);
+          stop:0 {t.primary_left}, stop:1 {t.primary});
     }}
 
     QPushButton#PrimaryButton:hover {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 #1D4ED8, stop:0.6 #2563EB, stop:1 #EC4899);
+          stop:0 {t.primary}, stop:1 {t.primary_hover});
     }}
 
     QPushButton#PrimaryButton:pressed {{
-      background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 #1E40AF, stop:1 #DB2777);
+      background: {t.primary_pressed};
     }}
 
     QPushButton#PrimaryButton:disabled {{
@@ -356,14 +355,14 @@ def qss() -> str:
       border: 0px;
       border-radius: 12px;
       padding: 9px 16px;
-      color: #9D174D;
+      color: {t.accent_strong};
       font-weight: 700;
       background: {t.accent_soft};
     }}
 
     QPushButton#PinkButton:hover {{
-      background: #FBCFE8;
-      color: #831843;
+      background: rgba(0,94,184,0.16);
+      color: {t.accent};
     }}
 
     QPushButton#DangerButton {{
@@ -376,24 +375,24 @@ def qss() -> str:
     }}
 
     QPushButton#DangerButton:hover {{
-      background: #BE123C;
+      background: #923D41;
     }}
 
     QPushButton#DangerButton:pressed {{
-      background: #9F1239;
+      background: #7A3438;
     }}
 
     /* ============ CARDS & FRAMES ============ */
     QFrame#Card {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-          stop:0 #FFFFFF, stop:0.6 #F6FAFF, stop:1 #FFF3F8);
+          stop:0 #FFFFFF, stop:1 #F8FAF9);
       border: 1px solid {t.border};
       border-radius: 16px;
     }}
 
     QFrame[card="true"] {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-          stop:0 #FFFFFF, stop:0.6 #F6FAFF, stop:1 #FFF3F8);
+          stop:0 #FFFFFF, stop:1 #F8FAF9);
       border: 1px solid {t.border};
       border-radius: 16px;
     }}
@@ -441,7 +440,7 @@ def qss() -> str:
 
     QHeaderView::section {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 #E7EEFC, stop:1 #FCE7F3);
+          stop:0 #E8EEEB, stop:1 #F0F4F2);
       border: 0px;
       border-bottom: 1px solid {t.border};
       padding: 11px 14px;
@@ -460,7 +459,7 @@ def qss() -> str:
     }}
 
     QTableCornerButton::section {{
-      background: #E7EEFC;
+      background: #E8EEEB;
       border: 0px;
       border-bottom: 1px solid {t.border};
     }}
@@ -473,7 +472,7 @@ def qss() -> str:
 
     QTableWidget::item:selected, QTableView::item:selected {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 rgba(59,130,246,0.16), stop:1 rgba(244,114,182,0.12));
+          stop:0 rgba(0,150,94,0.14), stop:1 rgba(0,94,184,0.10));
       color: {t.text_strong};
     }}
 
@@ -503,7 +502,7 @@ def qss() -> str:
 
     QListWidget::item:selected, QListView::item:selected {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 rgba(59,130,246,0.18), stop:1 rgba(244,114,182,0.14));
+          stop:0 rgba(0,150,94,0.16), stop:1 rgba(0,94,184,0.12));
       color: {t.text_strong};
     }}
 
@@ -625,9 +624,19 @@ def qss() -> str:
     }}
 
     QStatusBar {{
-      background: #FFFFFF;
-      border-top: 1px solid {t.border};
-      color: {t.muted};
+      background: {t.accent};
+      border-top: 0px;
+      color: rgba(255,255,255,0.92);
+      min-height: 22px;
+    }}
+
+    QStatusBar QLabel {{
+      color: rgba(255,255,255,0.92);
+      background: transparent;
+    }}
+
+    QStatusBar::item {{
+      border: 0px;
     }}
 
     /* ============ MENU ============ */
@@ -664,7 +673,7 @@ def qss() -> str:
 
     QDialogButtonBox QPushButton:default {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 #2563EB, stop:0.6 #3B82F6, stop:1 #F472B6);
+          stop:0 {t.primary_left}, stop:1 {t.primary});
       color: #FFFFFF;
       border: 0px;
       font-weight: 700;
@@ -672,7 +681,7 @@ def qss() -> str:
 
     QDialogButtonBox QPushButton:default:hover {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 #1D4ED8, stop:0.6 #2563EB, stop:1 #EC4899);
+          stop:0 {t.primary}, stop:1 {t.primary_hover});
     }}
 
     /* ============ MESSAGEBOX ============ */
@@ -705,14 +714,14 @@ def qss() -> str:
 
     QScrollBar::handle:vertical {{
       background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-          stop:0 rgba(59,130,246,0.45), stop:1 rgba(244,114,182,0.45));
+          stop:0 rgba(0,150,94,0.50), stop:1 rgba(0,94,184,0.45));
       border-radius: 4px;
       min-height: 36px;
     }}
 
     QScrollBar::handle:vertical:hover {{
       background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-          stop:0 rgba(29,78,216,0.70), stop:1 rgba(236,72,153,0.60));
+          stop:0 rgba(0,120,75,0.75), stop:1 rgba(0,74,140,0.70));
     }}
 
     QScrollBar:horizontal {{
@@ -724,14 +733,14 @@ def qss() -> str:
 
     QScrollBar::handle:horizontal {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 rgba(59,130,246,0.45), stop:1 rgba(244,114,182,0.45));
+          stop:0 rgba(0,150,94,0.50), stop:1 rgba(0,94,184,0.45));
       border-radius: 4px;
       min-width: 36px;
     }}
 
     QScrollBar::handle:horizontal:hover {{
       background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-          stop:0 rgba(29,78,216,0.70), stop:1 rgba(236,72,153,0.60));
+          stop:0 rgba(0,120,75,0.75), stop:1 rgba(0,74,140,0.70));
     }}
 
     QScrollBar::add-line, QScrollBar::sub-line {{

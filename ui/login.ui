@@ -14,7 +14,7 @@
   <property name="styleSheet">
    <string notr="true">QWidget#LoginPage{
 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-  stop:0 #0B1E3F, stop:0.35 #15306B, stop:0.7 #2563EB, stop:1 #F472B6);
+  stop:0 #006848, stop:0.45 #00965E, stop:1 #005EB8);
 }
 QWidget#LoginPage QLabel{
 background: transparent;
@@ -34,16 +34,16 @@ border-radius: 10px;
 padding: 11px 14px;
 color: #FFFFFF;
 font: 500 11pt "Segoe UI";
-selection-background-color: rgba(244,114,182,0.45);
+selection-background-color: rgba(0,150,94,0.55);
 min-height: 22px;
 }
 QFrame#LoginCard QLineEdit:hover{
 background: rgba(255,255,255,0.18);
-border: 1px solid rgba(191,219,254,0.55);
+border: 1px solid rgba(127,222,192,0.55);
 }
 QFrame#LoginCard QLineEdit:focus{
 background: rgba(255,255,255,0.22);
-border: 1px solid rgba(191,219,254,0.95);
+border: 1px solid rgba(127,222,192,0.95);
 }
 QLabel#Title{
 color: #FFFFFF;
@@ -51,11 +51,11 @@ font: 900 24pt "Segoe UI";
 letter-spacing: -0.5px;
 }
 QLabel#Subtitle{
-color: rgba(219,234,254,0.85);
+color: rgba(230,245,255,0.88);
 font: 500 10pt "Segoe UI";
 }
 QLabel#FieldLabel{
-color: rgba(219,234,254,0.90);
+color: rgba(230,245,255,0.92);
 font: 700 9pt "Segoe UI";
 letter-spacing: 0.4px;
 }
@@ -66,20 +66,20 @@ color: #FFFFFF;
 font: 800 11pt "Segoe UI";
 letter-spacing: 0.3px;
 padding: 11px 16px;
-background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563EB, stop:0.6 #3B82F6, stop:1 #F472B6);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00B078, stop:1 #00965E);
 }
 QPushButton#LoginButton:hover{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1D4ED8, stop:0.6 #2563EB, stop:1 #EC4899);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #00965E, stop:1 #007D4F);
 }
 QPushButton#LoginButton:pressed{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #1E40AF, stop:1 #DB2777);
+background: #006B44;
 }
 QLabel#Hint{
-color: rgba(219,234,254,0.55);
+color: rgba(255,255,255,0.50);
 font: 500 9pt "Segoe UI";
 }
 QFrame#Logo{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255,255,255,0.32), stop:1 rgba(244,114,182,0.18));
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 rgba(255,255,255,0.28), stop:1 rgba(0,94,184,0.20));
 border: 1px solid rgba(255,255,255,0.26);
 border-radius: 20px;
 }</string>

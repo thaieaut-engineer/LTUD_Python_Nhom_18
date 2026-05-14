@@ -29,7 +29,8 @@ class LoginPage(QWidget):
 
         self._bg = QWidget()
         self._bg.setStyleSheet(
-            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {THEME.sidebar_top}, stop:1 #3B3CC9);"
+            f"background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
+            f"stop:0 {THEME.sidebar_top}, stop:0.45 {THEME.sidebar_bottom}, stop:1 {THEME.accent});"
         )
         root.addWidget(self._bg, 1)
 

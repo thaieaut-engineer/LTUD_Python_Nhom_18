@@ -141,8 +141,8 @@ class RevenueBarChart(QWidget):
         slot = chart_w / n
         bar_w = max(10.0, min(slot * 0.62, 46.0))
 
-        grad_start = QColor("#60A5FA")
-        grad_end = QColor("#2563EB")
+        grad_start = QColor(THEME.primary_left)
+        grad_end = QColor(THEME.primary)
 
         painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
         for i, d in enumerate(self._data):
@@ -161,7 +161,7 @@ class RevenueBarChart(QWidget):
                 painter.drawRoundedRect(bar_rect, 6, 6)
 
                 # Gia tri tren dinh cot
-                painter.setPen(QColor(30, 64, 175))
+                painter.setPen(QColor(THEME.text_strong))
                 painter.drawText(
                     QRectF(x - 10, y - 18, bar_w + 20, 16),
                     int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom),
@@ -215,9 +215,9 @@ class DashboardView(QWidget):
         refresh_btn = QPushButton("⟳ Làm mới")
         refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_btn.setStyleSheet(
-            "QPushButton{background:#2563EB;color:white;border:none;"
+            f"QPushButton{{background:{THEME.primary};color:white;border:none;"
             "padding:6px 14px;border-radius:8px;font:700 9pt 'Segoe UI';}"
-            "QPushButton:hover{background:#1D4ED8;}"
+            f"QPushButton:hover{{background:{THEME.primary_hover};}}"
         )
         refresh_btn.clicked.connect(self.reload)
         root.addWidget(page_header("Trang chủ", right_widget=refresh_btn, emoji="📊"))
@@ -261,9 +261,9 @@ class DashboardView(QWidget):
         apply_btn = QPushButton("Áp dụng")
         apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         apply_btn.setStyleSheet(
-            "QPushButton{background:#0F172A;color:white;border:none;"
+            f"QPushButton{{background:{THEME.accent};color:white;border:none;"
             "padding:6px 14px;border-radius:8px;font:700 9pt 'Segoe UI';}"
-            "QPushButton:hover{background:#1E293B;}"
+            f"QPushButton:hover{{background:{THEME.accent_strong};}}"
         )
         apply_btn.clicked.connect(self.reload)
         filter_lay.addWidget(apply_btn)
@@ -281,22 +281,22 @@ class DashboardView(QWidget):
         stats.setVerticalSpacing(14)
 
         self._card_revenue_range, self._lbl_revenue_range = _stat_card(
-            "Doanh thu (khoảng đã chọn)", "#2563EB"
+            "Doanh thu (khoảng đã chọn)", THEME.primary
         )
         self._card_revenue_today, self._lbl_revenue_today = _stat_card(
-            "Doanh thu hôm nay", "#0EA5E9"
+            "Doanh thu hôm nay", THEME.success
         )
         self._card_revenue_month, self._lbl_revenue_month = _stat_card(
-            "Doanh thu tháng này", "#7C3AED"
+            "Doanh thu tháng này", THEME.accent
         )
         self._card_customers, self._lbl_customers = _stat_card(
-            "Khách hàng", "#10B981"
+            "Khách hàng", THEME.stat_green
         )
         self._card_new_customers, self._lbl_new_customers = _stat_card(
-            "KH mới trong tháng", "#F59E0B"
+            "KH mới trong tháng", THEME.stat_orange
         )
         self._card_appt_today, self._lbl_appt_today = _stat_card(
-            "Lịch hẹn hôm nay", "#EC4899"
+            "Lịch hẹn hôm nay", THEME.stat_pink
         )
 
         stats.addWidget(self._card_revenue_range, 0, 0)
@@ -567,7 +567,7 @@ class DashboardView(QWidget):
             self._emp_table.setItem(r, 4, _cell(_VND(e.service_revenue), right=True))
             self._emp_table.setItem(r, 5, _cell(_VND(e.retail_revenue), right=True))
             total_item = _cell(_VND(e.total_revenue), right=True)
-            total_item.setForeground(QColor("#0F172A"))
+            total_item.setForeground(QColor(THEME.text_strong))
             self._emp_table.setItem(r, 6, total_item)
         if not items:
             self._emp_table.setRowCount(1)

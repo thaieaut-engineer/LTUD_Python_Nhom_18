@@ -4,27 +4,27 @@
  <widget class="QWidget" name="DashboardPage">
   <property name="styleSheet">
    <string notr="true">QFrame#Card{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #FFFFFF, stop:0.6 #F6FAFF, stop:1 #FFF3F8);
-border: 1px solid #D6E2F7;
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #FFFFFF, stop:1 #F8FAF9);
+border: 1px solid #E2E5E4;
 border-radius: 16px;
 }
 QFrame#StatBlue{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3B82F6, stop:1 #1D4ED8);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0A7AD4, stop:1 #005EB8);
 border-radius: 18px;
 border: none;
 }
 QFrame#StatOrange{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #60A5FA, stop:1 #2563EB);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #00B078, stop:1 #00965E);
 border-radius: 18px;
 border: none;
 }
 QFrame#StatGreen{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #7DD3FC, stop:1 #0EA5E9);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #009060, stop:1 #007D56);
 border-radius: 18px;
 border: none;
 }
 QFrame#StatPink{
-background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #F9A8D4, stop:1 #EC4899);
+background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #C75F63, stop:1 #B34D52);
 border-radius: 18px;
 border: none;
 }

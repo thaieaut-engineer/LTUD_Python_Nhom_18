@@ -50,7 +50,7 @@ def _exec_sql_file(path: Path, use_db: bool) -> None:
 
 
 def _split_sql(sql: str) -> list[str]:
-    """Tach file SQL thanh nhieu cau lenh. Loai bo comment va dong trong."""
+    """Tach file SQL thanh nhieu cau lenh. Loai bo comment -- ; khong cat tai semicolon trong chuoi '...'."""
     cleaned_lines = []
     for line in sql.splitlines():
         stripped = line.strip()
@@ -58,7 +58,36 @@ def _split_sql(sql: str) -> list[str]:
             continue
         cleaned_lines.append(line)
     cleaned = "\n".join(cleaned_lines)
-    return [s.strip() for s in cleaned.split(";") if s.strip()]
+
+    statements: list[str] = []
+    buf: list[str] = []
+    in_string = False
+    i = 0
+    while i < len(cleaned):
+        ch = cleaned[i]
+        if ch == "'" and in_string:
+            # SQL: '' = escaped quote inside string literal
+            if i + 1 < len(cleaned) and cleaned[i + 1] == "'":
+                buf.append("''")
+                i += 2
+                continue
+            in_string = False
+            buf.append(ch)
+        elif ch == "'" and not in_string:
+            in_string = True
+            buf.append(ch)
+        elif ch == ";" and not in_string:
+            stmt = "".join(buf).strip()
+            if stmt:
+                statements.append(stmt)
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        statements.append(tail)
+    return statements
 
 
 def reset_default_passwords() -> None:

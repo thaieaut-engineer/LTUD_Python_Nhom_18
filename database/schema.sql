@@ -174,7 +174,7 @@ CREATE TABLE product (
 -- ---------------------------------------------------------------------
 CREATE TABLE invoice (
     id                  INT             AUTO_INCREMENT PRIMARY KEY,
-    appointment_id      INT             NULL UNIQUE COMMENT 'NULL voi hoa don ban le; voi hoa don dich vu thi 1-1 voi appointment',
+    appointment_id      INT             NULL UNIQUE COMMENT 'NULL voi hoa don ban le. Hoa don dich vu 1-1 voi appointment',
     customer_id         INT             NULL COMMENT 'Khach hang (cho hoa don ban le)',
     invoice_type        ENUM('SERVICE','RETAIL') NOT NULL DEFAULT 'SERVICE',
     invoice_no          VARCHAR(30)     NOT NULL UNIQUE,

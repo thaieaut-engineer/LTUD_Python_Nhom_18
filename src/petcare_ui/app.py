@@ -34,7 +34,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from .theme import background_image_path, qss
+from .theme import THEME, background_image_path, qss
 from .pages.dashboard import DashboardView
 from src.petcare_backend.services import auth_service
 from src.petcare_backend.services import customer_service, pet_service, service_service
@@ -260,7 +260,7 @@ class PetBackground(QLabel):
         self,
         parent: QWidget,
         image_path: str,
-        overlay_color: tuple[int, int, int, int] = (239, 246, 255, 170),
+        overlay_color: tuple[int, int, int, int] = (244, 245, 247, 170),
     ) -> None:
         super().__init__(parent)
         self._pix = QPixmap(image_path)
@@ -355,7 +355,7 @@ class PetCareApp(QMainWindow):
     def _install_pet_background(
         self,
         widget: QWidget,
-        overlay_color: tuple[int, int, int, int] = (239, 246, 255, 140),
+        overlay_color: tuple[int, int, int, int] = (244, 245, 247, 140),
     ) -> PetBackground | None:
         if not self._bg_path or not Path(self._bg_path).exists():
             return None
@@ -363,14 +363,14 @@ class PetCareApp(QMainWindow):
 
     def _install_backgrounds(self) -> None:
         login_root = self._login.findChild(QWidget, "LoginPage") or self._login
-        self._install_pet_background(login_root, overlay_color=(11, 30, 63, 155))
+        self._install_pet_background(login_root, overlay_color=(0, 104, 72, 150))
 
         app_root = self._main.centralWidget()
         if app_root is not None:
             app_root.setObjectName("AppRoot")
             app_root.style().unpolish(app_root)
             app_root.style().polish(app_root)
-            self._install_pet_background(app_root, overlay_color=(239, 246, 255, 60))
+            self._install_pet_background(app_root, overlay_color=(244, 245, 247, 72))
 
     def _apply_theme(self) -> None:
         app = QApplication.instance()
@@ -401,7 +401,7 @@ class PetCareApp(QMainWindow):
             "QPushButton{background:rgba(255,255,255,0.10);color:rgba(255,255,255,0.85);"
             "border:1px solid rgba(255,255,255,0.22);padding:9px 12px;border-radius:12px;"
             "font:700 10pt 'Segoe UI';}"
-            "QPushButton:hover{background:rgba(255,255,255,0.16);border:1px solid rgba(191,219,254,0.65);}"
+            "QPushButton:hover{background:rgba(255,255,255,0.16);border:1px solid rgba(127,222,192,0.65);}"
         )
         btn.clicked.connect(self._show_register_dialog)
 
@@ -675,7 +675,7 @@ class PetCareApp(QMainWindow):
             inv_type = str(i.get("invoice_type") or "SERVICE")
             type_label = "Bán lẻ" if inv_type == "RETAIL" else "Dịch vụ"
             type_item = QTableWidgetItem(type_label)
-            type_item.setForeground(QColor("#2563EB" if inv_type == "RETAIL" else "#0F766E"))
+            type_item.setForeground(QColor(THEME.accent if inv_type == "RETAIL" else THEME.success))
             table.setItem(r, 1, type_item)
             issued = i.get("issued_at")
             issued_txt = issued.strftime("%d/%m/%Y %H:%M") if issued else ""
@@ -1025,8 +1025,8 @@ class PetCareApp(QMainWindow):
         btn_export = QPushButton("Xuất PDF")
         btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_export.setStyleSheet(
-            "QPushButton{background:#2563EB;color:white;border:none;padding:6px 14px;border-radius:8px;font:800 9pt 'Segoe UI';}"
-            "QPushButton:hover{background:#1D4ED8;}"
+            f"QPushButton{{background:{THEME.primary};color:white;border:none;padding:6px 14px;border-radius:8px;font:800 9pt 'Segoe UI';}}"
+            f"QPushButton:hover{{background:{THEME.primary_hover};}}"
         )
         top_bar.addWidget(btn_export)
         root.addLayout(top_bar)
@@ -1051,7 +1051,7 @@ class PetCareApp(QMainWindow):
                 t = str(it.get("item_type") or "SERVICE")
                 t_label = "Sản phẩm" if t == "PRODUCT" else "Dịch vụ"
                 t_item = QTableWidgetItem(t_label)
-                t_item.setForeground(QColor("#2563EB" if t == "PRODUCT" else "#0F766E"))
+                t_item.setForeground(QColor(THEME.accent if t == "PRODUCT" else THEME.success))
                 table.setItem(r, 0, t_item)
                 table.setItem(r, 1, QTableWidgetItem(str(it.get("pet_name") or "—")))
                 name_txt = str(it.get("item_name") or it.get("service_name") or it.get("product_name") or "")
