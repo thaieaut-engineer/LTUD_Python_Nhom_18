@@ -49,6 +49,35 @@ from src.petcare_backend.session import Session
 
 
 APPOINTMENT_STATUSES = ("Chờ xử lý", "Đang thực hiện", "Hoàn thành", "Hủy")
+APPOINTMENT_ACTIVE_STATUSES = ("Chờ xử lý", "Đang thực hiện")
+APPOINTMENT_HISTORY_STATUSES = ("Hoàn thành", "Hủy")
+
+_APPT_TAB_BTN_QSS = f"""
+QPushButton {{
+  background: rgba(255,255,255,0.85);
+  border: 1px solid {THEME.border_pink};
+  border-radius: 10px;
+  padding: 6px 16px;
+  font: 700 9pt 'Segoe UI';
+  color: {THEME.text_soft};
+  min-width: 96px;
+}}
+QPushButton:checked {{
+  background: {THEME.accent};
+  border: 1px solid {THEME.accent_strong};
+  color: #FFFFFF;
+}}
+QPushButton:hover {{
+  border: 1px solid {THEME.accent};
+}}
+"""
+
+_APPT_STATUS_COLORS = {
+    "Chờ xử lý": THEME.warning,
+    "Đang thực hiện": THEME.accent,
+    "Hoàn thành": THEME.success,
+    "Hủy": THEME.danger,
+}
 
 # Nut thao tac trong bang nhan vien: global QPushButton co min-height 34px + padding lon;
 # dat trong QTableWidget de bi cat neu hang khong du cao — gon lai va can giua doc.
@@ -631,12 +660,10 @@ class PetCareApp(QMainWindow):
 
             table: QTableWidget = ap_page.appointmentsTable
             self._setup_appointments_table(table)
-            # Bang chi hien thong tin, khong edit truc tiep (doi trang thai trong dialog chi tiet)
-            # Bo panel chi tiet ben duoi -> khong can itemSelectionChanged nua
-            # Mo chi tiet bang click 1 lan (an toan hon double click)
+            self._appointment_list_mode = "active"
+            self._setup_appointment_list_tabs(ap_page)
             table.cellClicked.connect(lambda r, c: self._on_appointment_row_clicked(r, c))
 
-            # an luon panel chi tiet ben duoi danh sach
             if hasattr(ap_page, "detailTitle"):
                 ap_page.detailTitle.setVisible(False)
             if hasattr(ap_page, "appointmentDetailEdit"):
@@ -1375,6 +1402,103 @@ class PetCareApp(QMainWindow):
             text = " ".join((table.item(r, c).text() if table.item(r, c) else "") for c in cols).lower()
             table.setRowHidden(r, q not in text)
 
+    def _setup_appointment_list_tabs(self, ap_page: QWidget) -> None:
+        """Tab Đang xử lý / Lịch sử + ô tìm kiếm."""
+        if hasattr(ap_page, "tabActiveButton"):
+            ap_page.tabActiveButton.setStyleSheet(_APPT_TAB_BTN_QSS)
+            ap_page.tabHistoryButton.setStyleSheet(_APPT_TAB_BTN_QSS)
+            ap_page.tabActiveButton.clicked.connect(
+                lambda: self._set_appointment_list_mode("active")
+            )
+            ap_page.tabHistoryButton.clicked.connect(
+                lambda: self._set_appointment_list_mode("history")
+            )
+        if hasattr(ap_page, "appointmentSearchEdit"):
+            ap_page.appointmentSearchEdit.setVisible(False)
+            ap_page.appointmentSearchEdit.textChanged.connect(
+                lambda _: self._apply_appointment_search_filter()
+            )
+
+    def _set_appointment_list_mode(self, mode: str) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+        self._appointment_list_mode = mode
+        is_active = mode == "active"
+        if hasattr(ap_page, "tabActiveButton"):
+            ap_page.tabActiveButton.setChecked(is_active)
+            ap_page.tabHistoryButton.setChecked(not is_active)
+        if hasattr(ap_page, "recentTitle"):
+            ap_page.recentTitle.setText(
+                "Danh sách lịch hẹn" if is_active else "Lịch sử lịch hẹn"
+            )
+        if hasattr(ap_page, "appointmentSearchEdit"):
+            ap_page.appointmentSearchEdit.setVisible(not is_active)
+            if is_active:
+                ap_page.appointmentSearchEdit.clear()
+        self._reload_appointments_table()
+
+    @staticmethod
+    def _format_vnd(amount) -> str:
+        try:
+            return f"{int(float(amount or 0)):,}đ".replace(",", ".")
+        except (TypeError, ValueError):
+            return "0đ"
+
+    def _apply_appointment_search_filter(self) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page:
+            return
+        table: QTableWidget = ap_page.appointmentsTable
+        query = ""
+        if hasattr(ap_page, "appointmentSearchEdit"):
+            query = ap_page.appointmentSearchEdit.text()
+        self._filter_table(table, query, cols=(0, 1, 2, 3, 4, 5, 6))
+
+    def _update_appointment_status_badges(self, rows: list) -> None:
+        ap_page = self._pages.get("appointments")
+        if not ap_page or not hasattr(ap_page, "statusBadgesLayout"):
+            return
+        layout: QHBoxLayout = ap_page.statusBadgesLayout
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        mode = getattr(self, "_appointment_list_mode", "active")
+        if mode == "active":
+            specs = [
+                ("Chờ xử lý", THEME.warning, THEME.warning_soft),
+                ("Đang thực hiện", THEME.accent, THEME.accent_soft),
+            ]
+        else:
+            specs = [
+                ("Hoàn thành", THEME.success, THEME.success_soft),
+                ("Hủy", THEME.danger, THEME.danger_soft),
+            ]
+
+        counts = {label: 0 for label, _, _ in specs}
+        for row in rows:
+            label = str(row.get("status_label") or "")
+            if label in counts:
+                counts[label] += 1
+
+        for label, fg, bg in specs:
+            badge = QLabel(f"  {label}: {counts[label]}  ")
+            badge.setStyleSheet(
+                f"background:{bg}; color:{fg}; font:800 9pt 'Segoe UI';"
+                f"border:1px solid {fg}; border-radius:10px; padding:4px 8px;"
+            )
+            layout.addWidget(badge)
+        layout.addStretch(1)
+
+    @staticmethod
+    def _colorize_status_item(item: QTableWidgetItem, status_label: str) -> None:
+        color = _APPT_STATUS_COLORS.get(status_label)
+        if color:
+            item.setForeground(QColor(color))
+            item.setData(Qt.ItemDataRole.UserRole + 1, status_label)
+
     def _setup_appointments_table(self, table: QTableWidget) -> None:
         table.setAlternatingRowColors(True)
         vh = table.verticalHeader()
@@ -1590,20 +1714,21 @@ class PetCareApp(QMainWindow):
             elif data == "NONE":
                 only_unassigned = True
 
-        # Employee tu dong bi rang buoc xem cua minh (xem _refresh_appointments_employee_filter)
         if not getattr(self, "_is_admin", False):
             current = Session.current()
             if current is not None:
                 employee_id = int(current.id)
             only_unassigned = False
 
-        if only_unassigned:
-            self._appointments_rows = appointment_service.list_unassigned(limit=150)  # type: ignore[attr-defined]
-        else:
-            self._appointments_rows = appointment_service.list_recent(  # type: ignore[attr-defined]
-                limit=150, employee_id=employee_id
-            )
+        scope = "active" if getattr(self, "_appointment_list_mode", "active") == "active" else "history"
+        self._appointments_rows = appointment_service.list_filtered(  # type: ignore[attr-defined]
+            limit=150,
+            employee_id=employee_id,
+            only_unassigned=only_unassigned,
+            status_scope=scope,
+        )
         self._render_appointments_table_db()
+        self._apply_appointment_search_filter()
 
     def _render_appointments_table_db(self) -> None:
         ap_page = self._pages.get("appointments")
@@ -1630,6 +1755,7 @@ class PetCareApp(QMainWindow):
 
             status_item = QTableWidgetItem(str(a.get("status_label") or ""))
             status_item.setData(Qt.ItemDataRole.UserRole, appt_id)
+            self._colorize_status_item(status_item, str(a.get("status_label") or ""))
             table.setItem(r, 5, status_item)
 
             res_item = QTableWidgetItem(str(a.get("note") or ""))
@@ -1650,6 +1776,7 @@ class PetCareApp(QMainWindow):
 
         # ensure table is read-only
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._update_appointment_status_badges(rows)
 
     def _on_appointment_selection_changed_db(self) -> None:
         ap_page = self._pages.get("appointments")
@@ -1689,43 +1816,87 @@ class PetCareApp(QMainWindow):
             return
         a = rows[row]
         appt_id = int(a.get("appointment_id") or 0)
+        current_status = str(a.get("status_label") or "Chờ xử lý")
+        is_history = current_status in APPOINTMENT_HISTORY_STATUSES
+        is_admin = bool(getattr(self, "_is_admin", False))
+        current_emp = a.get("employee_id")
 
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Chi tiết lịch hẹn #{a.get('appointment_id', '')}")
-        dlg.resize(680, 600)
-        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
+        dlg.setWindowTitle(
+            f"{'Xem chi tiết' if is_history else 'Chi tiết lịch hẹn'} #{a.get('appointment_id', '')}"
+        )
+        dlg.setFixedWidth(780)
+        dlg.setMaximumHeight(760)
+        self._install_pet_background(dlg, overlay_color=(239, 246, 255, 175))
 
-        root = QVBoxLayout(dlg)
-        root.setSpacing(10)
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(16, 16, 16, 16)
+        outer.setSpacing(0)
 
-        header = QLabel("Thông tin lịch hẹn")
-        header.setStyleSheet("font: 900 11pt 'Segoe UI'; color:#0F172A;")
-        root.addWidget(header)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        body = QWidget()
+        root = QVBoxLayout(body)
+        root.setSpacing(14)
+        root.setContentsMargins(2, 2, 2, 2)
 
-        status_row = QHBoxLayout()
-        status_lbl = QLabel("Trạng thái")
-        status_lbl.setStyleSheet("color: rgba(15,23,42,0.65); font: 700 9pt 'Segoe UI';")
-        status_row.addWidget(status_lbl)
+        # Header panel (style tham khảo POS bida)
+        header_frame = QFrame()
+        header_frame.setStyleSheet(
+            f"QFrame{{background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            f"stop:0 {THEME.accent_strong}, stop:1 {THEME.accent});"
+            f"border-radius:14px; border:1px solid {THEME.accent_strong};}}"
+        )
+        header_layout = QVBoxLayout(header_frame)
+        header_layout.setContentsMargins(18, 14, 18, 14)
+        header_layout.setSpacing(6)
+
+        title_row = QHBoxLayout()
+        title = QLabel(f"{'📋 Chi tiết lịch sử' if is_history else '⚙ Lịch hẹn'} #{a.get('appointment_id','')}")
+        title.setStyleSheet("font:900 12pt 'Segoe UI'; color:#FFFFFF;")
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        status_badge = QLabel(f" {current_status} ")
+        status_badge.setStyleSheet(
+            "background:rgba(255,255,255,0.18); color:#FFFFFF; font:800 8pt 'Segoe UI';"
+            "border:1px solid rgba(255,255,255,0.45); border-radius:8px; padding:1px 6px;"
+        )
+        title_row.addWidget(status_badge)
+        header_layout.addLayout(title_row)
+
+        meta = QLabel(
+            f"{self._fmt_dt_safe(a.get('scheduled_at'))}  •  {a.get('customer_name','')}  •  "
+            f"{a.get('customer_phone') or '—'}  •  {a.get('employee_name') or 'Chưa phân công'}"
+        )
+        meta.setStyleSheet("color:rgba(255,255,255,0.85); font:600 10pt 'Segoe UI';")
+        meta.setWordWrap(True)
+        header_layout.addWidget(meta)
+        root.addWidget(header_frame)
+
+        # Gộp địa chỉ (nếu có) thành 1 dòng phụ — tiết kiệm chiều cao
+        address = str(a.get("customer_address") or "").strip()
+        if address:
+            addr_lbl = QLabel(f"📍 {address}")
+            addr_lbl.setStyleSheet(
+                "color:rgba(15,23,42,0.65); font:600 9pt 'Segoe UI';"
+                "background:rgba(255,255,255,0.88); border:1px solid #D6E2F7; border-radius:8px; padding:6px 10px;"
+            )
+            addr_lbl.setWordWrap(True)
+            root.addWidget(addr_lbl)
+
+        # Thao tác nhanh (chỉ lịch đang xử lý)
         status_combo = QComboBox()
         status_combo.addItems(APPOINTMENT_STATUSES)
-        current_status = str(a.get("status_label") or "Chờ xử lý")
         idx = status_combo.findText(current_status)
         if idx >= 0:
             status_combo.setCurrentIndex(idx)
-        status_row.addWidget(status_combo, 1)
-        root.addLayout(status_row)
 
-        # Phan cong nhan vien (chi Admin moi enable)
-        is_admin = bool(getattr(self, "_is_admin", False))
-        emp_row = QHBoxLayout()
-        emp_lbl = QLabel("Nhân viên phụ trách")
-        emp_lbl.setStyleSheet("color: rgba(15,23,42,0.65); font: 700 9pt 'Segoe UI';")
-        emp_row.addWidget(emp_lbl)
         emp_combo = QComboBox()
         emp_combo.addItem("— Chưa phân công —", 0)
         for u in self._employees_list:
             emp_combo.addItem(f"{u.full_name} ({u.username})", int(u.id))
-        current_emp = a.get("employee_id")
         if current_emp:
             cur_idx = emp_combo.findData(int(current_emp))
             if cur_idx < 0:
@@ -1733,102 +1904,206 @@ class PetCareApp(QMainWindow):
                 emp_combo.addItem(str(emp_name), int(current_emp))
                 cur_idx = emp_combo.findData(int(current_emp))
             emp_combo.setCurrentIndex(cur_idx)
-        emp_combo.setEnabled(is_admin)
-        emp_row.addWidget(emp_combo, 1)
-        root.addLayout(emp_row)
+        emp_combo.setEnabled(is_admin and not is_history)
 
-        if not is_admin:
+        can_edit = not is_history
+        if not is_admin and not is_history:
             current_user = Session.current()
             if current_user is not None and current_emp and int(current_emp) != int(current_user.id):
-                # Khoa form khi nhan vien khong phai nguoi phu trach
-                status_combo.setEnabled(False)
-                hint = QLabel("Bạn không phải nhân viên phụ trách lịch hẹn này, không được sửa.")
-                hint.setStyleSheet("color:#B91C1C; font:700 9pt 'Segoe UI';")
+                can_edit = False
+
+        if not is_history:
+            actions_card = QFrame()
+            actions_card.setStyleSheet(
+                f"QFrame{{background:{THEME.accent_soft}; border:1px solid #D6E2F7; border-radius:10px;}}"
+            )
+            actions_layout = QVBoxLayout(actions_card)
+            actions_layout.setContentsMargins(12, 10, 12, 10)
+            actions_layout.setSpacing(8)
+
+            quick_grid = QGridLayout()
+            quick_grid.setSpacing(8)
+            quick_btn_qss = (
+                f"QPushButton{{background:#FFFFFF; border:1px solid {THEME.border}; border-radius:8px;"
+                f"padding:10px 12px; font:700 10pt 'Segoe UI'; color:{THEME.text}; min-height:44px; max-height:48px;}}"
+                f"QPushButton:hover{{border:1px solid {THEME.accent}; color:{THEME.accent};}}"
+            )
+
+            def _set_status(label: str) -> None:
+                si = status_combo.findText(label)
+                if si >= 0:
+                    status_combo.setCurrentIndex(si)
+
+            quick_specs = [
+                ("▶ Đang TH", "Đang thực hiện"),
+                ("✓ Hoàn thành", "Hoàn thành"),
+                ("✕ Hủy", "Hủy"),
+            ]
+            for i, (btn_text, status_label) in enumerate(quick_specs):
+                btn = QPushButton(btn_text)
+                btn.setStyleSheet(quick_btn_qss)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setEnabled(can_edit)
+                btn.clicked.connect(lambda _checked=False, s=status_label: _set_status(s))
+                quick_grid.addWidget(btn, i // 3, i % 3)
+
+            actions_layout.addLayout(quick_grid)
+
+            ctrl_row = QHBoxLayout()
+            ctrl_row.setSpacing(6)
+            status_lbl = QLabel("Trạng thái")
+            status_lbl.setStyleSheet("color:rgba(15,23,42,0.65); font:700 10pt 'Segoe UI';")
+            ctrl_row.addWidget(status_lbl)
+            status_combo.setEnabled(can_edit)
+            status_combo.setMaximumHeight(42)
+            ctrl_row.addWidget(status_combo, 1)
+            emp_lbl = QLabel("NV phụ trách")
+            emp_lbl.setStyleSheet("color:rgba(15,23,42,0.65); font:700 10pt 'Segoe UI';")
+            ctrl_row.addWidget(emp_lbl)
+            emp_combo.setMaximumHeight(42)
+            ctrl_row.addWidget(emp_combo, 1)
+            actions_layout.addLayout(ctrl_row)
+
+            if not can_edit:
+                hint = QLabel("Bạn không phải nhân viên phụ trách — chỉ xem, không chỉnh sửa.")
+                hint.setStyleSheet(f"color:{THEME.danger}; font:700 9pt 'Segoe UI';")
                 hint.setWordWrap(True)
-                root.addWidget(hint)
+                actions_layout.addWidget(hint)
 
-        info_lines = [
-            f"Mã lịch hẹn: {a.get('appointment_id','')}",
-            f"Thời gian: {self._fmt_dt_safe(a.get('scheduled_at'))}",
-            f"Khách hàng: {a.get('customer_name','')}",
-            f"SĐT: {a.get('customer_phone','—')}",
-            f"Địa chỉ: {a.get('customer_address','—')}",
-            f"Nhân viên: {a.get('employee_name') or '— Chưa phân công'}",
-        ]
-        info_text = QPlainTextEdit()
-        info_text.setReadOnly(True)
-        info_text.setPlainText("\n".join(info_lines))
-        info_text.setMaximumHeight(120)
-        root.addWidget(info_text)
+            root.addWidget(actions_card)
 
-        svc_lbl = QLabel("Thú cưng & dịch vụ")
-        svc_lbl.setStyleSheet("font: 800 10pt 'Segoe UI'; color:#0F172A;")
-        root.addWidget(svc_lbl)
-
-        svc_table = QTableWidget()
-        svc_table.setColumnCount(4)
-        svc_table.setHorizontalHeaderLabels(["Thú cưng", "Dịch vụ", "SL", "Đơn giá"])
-        self._setup_table(svc_table)
+        # Dịch vụ + tổng tiền (style bảng kê POS)
         try:
             svc_items = appointment_service_dao.list_by_appointment(appt_id)
         except Exception:
             svc_items = []
+
+        svc_card = QFrame()
+        svc_card.setStyleSheet(
+            "QFrame{background:rgba(255,255,255,0.94); border:1px solid #D6E2F7; border-radius:12px;}"
+        )
+        svc_layout = QVBoxLayout(svc_card)
+        svc_layout.setContentsMargins(16, 14, 16, 14)
+        svc_layout.setSpacing(12)
+
+        svc_title = QLabel("Thú cưng & dịch vụ")
+        svc_title.setStyleSheet("font:800 11pt 'Segoe UI'; color:#0F172A;")
+        svc_layout.addWidget(svc_title)
+
+        svc_table = QTableWidget()
+        svc_table.setColumnCount(5)
+        svc_table.setHorizontalHeaderLabels(["Thú cưng", "Dịch vụ", "SL", "Đơn giá", "T.Tiền"])
+        self._setup_table(svc_table)
+        svc_vh = svc_table.verticalHeader()
+        svc_vh.setDefaultSectionSize(50)
+        svc_vh.setMinimumSectionSize(50)
+        total_amount = 0.0
         svc_table.setRowCount(len(svc_items))
         for r, it in enumerate(svc_items):
-            svc_table.setItem(r, 0, QTableWidgetItem(str(it.get("pet_name") or "—")))
-            svc_table.setItem(r, 1, QTableWidgetItem(str(it.get("service_name") or "")))
-            svc_table.setItem(r, 2, QTableWidgetItem(str(it.get("quantity") or 1)))
-            try:
-                price_txt = f"{int(float(it.get('unit_price') or 0)):,}đ".replace(",", ".")
-            except Exception:
-                price_txt = str(it.get("unit_price") or "")
-            svc_table.setItem(r, 3, QTableWidgetItem(price_txt))
+            qty = int(it.get("quantity") or 1)
+            unit_price = float(it.get("unit_price") or 0)
+            line_total = qty * unit_price
+            total_amount += line_total
+            svc_name = str(it.get("service_name") or "")
+            pet_name = str(it.get("pet_name") or "—")
+            svc_table.setItem(r, 0, QTableWidgetItem(pet_name))
+            svc_table.setItem(r, 1, QTableWidgetItem(svc_name))
+            svc_table.setItem(r, 2, QTableWidgetItem(str(qty)))
+            svc_table.setItem(r, 3, QTableWidgetItem(self._format_vnd(unit_price)))
+            svc_table.setItem(r, 4, QTableWidgetItem(self._format_vnd(line_total)))
         hdr = svc_table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        svc_table.setMinimumHeight(160)
-        root.addWidget(svc_table, 1)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setDefaultSectionSize(34)
+        visible_rows = max(len(svc_items), 3)
+        table_h = 40 + visible_rows * 50
+        svc_table.setMinimumHeight(table_h)
+        svc_table.setFixedHeight(table_h)
+        svc_layout.addWidget(svc_table)
 
+        summary_frame = QFrame()
+        summary_frame.setStyleSheet(
+            f"QFrame{{background:{THEME.accent_strong}; border-radius:8px;}}"
+        )
+        summary_layout = QHBoxLayout(summary_frame)
+        summary_layout.setContentsMargins(16, 12, 16, 12)
+        total_lbl = QLabel(f"Tổng dịch vụ: {self._format_vnd(total_amount or a.get('total_amount'))}")
+        total_lbl.setStyleSheet("font:900 12pt 'Segoe UI'; color:#FFFFFF;")
+        summary_layout.addWidget(total_lbl)
+        summary_layout.addStretch(1)
+        svc_layout.addWidget(summary_frame)
+        root.addWidget(svc_card)
+
+        result_row = QHBoxLayout()
+        result_row.setSpacing(6)
         result_lbl = QLabel("Kết quả dịch vụ")
-        result_lbl.setStyleSheet("font: 800 10pt 'Segoe UI'; color:#0F172A;")
-        root.addWidget(result_lbl)
+        result_lbl.setStyleSheet("font:800 11pt 'Segoe UI'; color:#0F172A;")
+        result_row.addWidget(result_lbl)
+        root.addLayout(result_row)
 
         result_edit = QPlainTextEdit()
-        result_edit.setPlaceholderText("Nhập kết quả dịch vụ...")
+        result_edit.setPlaceholderText("Nhập kết quả dịch vụ..." if not is_history else "")
         result_edit.setPlainText(str(a.get("note") or ""))
-        result_edit.setMaximumHeight(120)
+        result_edit.setReadOnly(is_history or not can_edit)
+        result_edit.setFixedHeight(100)
         root.addWidget(result_edit)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Close
-        )
-        save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
-        if save_btn is not None:
-            save_btn.setText("Lưu thay đổi")
+        scroll.setWidget(body)
+        outer.addWidget(scroll, 1)
 
-        def _on_save() -> None:
-            if appt_id <= 0:
-                QMessageBox.warning(dlg, "Lưu", "ID lịch hẹn không hợp lệ.")
-                return
-            try:
-                if is_admin:
-                    new_emp = emp_combo.currentData()
-                    new_emp_id = int(new_emp) if isinstance(new_emp, int) and new_emp > 0 else None
-                    if new_emp_id != (int(current_emp) if current_emp else None):
-                        appointment_service.assign_employee(appt_id, new_emp_id)
-                appointment_service.update_status(appt_id, status_combo.currentText())
-                appointment_service.update_result_note(appt_id, result_edit.toPlainText())
-            except Exception as exc:
-                QMessageBox.warning(dlg, "Lưu", str(exc))
-                return
-            self._reload_appointments_table()
-            dlg.accept()
+        if is_history or not can_edit:
+            buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+            close_btn = buttons.button(QDialogButtonBox.StandardButton.Close)
+            if close_btn is not None:
+                close_btn.setText("Đóng")
+            buttons.rejected.connect(dlg.reject)
+        else:
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Close
+            )
+            save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
+            if save_btn is not None:
+                save_btn.setText("Lưu thay đổi")
 
-        buttons.accepted.connect(_on_save)
-        buttons.rejected.connect(dlg.reject)
-        root.addWidget(buttons)
+            def _on_save() -> None:
+                if appt_id <= 0:
+                    QMessageBox.warning(dlg, "Lưu", "ID lịch hẹn không hợp lệ.")
+                    return
+                new_status = status_combo.currentText()
+                try:
+                    if is_admin:
+                        new_emp = emp_combo.currentData()
+                        new_emp_id = int(new_emp) if isinstance(new_emp, int) and new_emp > 0 else None
+                        if new_emp_id != (int(current_emp) if current_emp else None):
+                            appointment_service.assign_employee(appt_id, new_emp_id)
+                    appointment_service.update_status(appt_id, new_status)
+                    appointment_service.update_result_note(appt_id, result_edit.toPlainText())
+                except Exception as exc:
+                    QMessageBox.warning(dlg, "Lưu", str(exc))
+                    return
+                self._reload_appointments_table()
+                if new_status in APPOINTMENT_HISTORY_STATUSES:
+                    QMessageBox.information(
+                        dlg,
+                        "Hoàn tất",
+                        f"Lịch hẹn đã chuyển sang tab Lịch sử ({new_status}).",
+                    )
+                dlg.accept()
+
+            buttons.accepted.connect(_on_save)
+            buttons.rejected.connect(dlg.reject)
+
+        btn_bar = QHBoxLayout()
+        btn_bar.setContentsMargins(0, 6, 0, 0)
+        btn_bar.addStretch(1)
+        btn_bar.addWidget(buttons)
+        outer.addLayout(btn_bar)
+
+        dlg.adjustSize()
+        dlg.setFixedHeight(min(dlg.sizeHint().height() + 8, 760))
         dlg.exec()
 
     @staticmethod

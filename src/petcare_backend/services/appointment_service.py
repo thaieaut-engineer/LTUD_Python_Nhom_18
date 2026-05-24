@@ -119,9 +119,24 @@ def _decorate(rows: list[dict]) -> list[dict]:
 
 def list_recent(limit: int = 100, *, employee_id: int | None = None) -> list[dict]:
     """Liet ke lich hen gan day. Neu employee_id != None -> chi cua nhan vien do."""
-    if employee_id is not None:
-        return _decorate(appointment_dao.list_by_employee(int(employee_id), limit=limit))
-    return _decorate(appointment_dao.list_recent(limit=limit))
+    return list_filtered(limit=limit, employee_id=employee_id)
+
+
+def list_filtered(
+    limit: int = 100,
+    *,
+    employee_id: int | None = None,
+    only_unassigned: bool = False,
+    status_scope: str | None = None,
+) -> list[dict]:
+    """status_scope: 'active' (dang xu ly) | 'history' (hoan thanh/huy) | None."""
+    rows = appointment_dao.list_filtered(
+        limit=limit,
+        employee_id=employee_id,
+        only_unassigned=only_unassigned,
+        status_scope=status_scope,
+    )
+    return _decorate(rows)
 
 
 def list_for_employee(employee_id: int, limit: int = 200) -> list[dict]:
@@ -129,7 +144,7 @@ def list_for_employee(employee_id: int, limit: int = 200) -> list[dict]:
 
 
 def list_unassigned(limit: int = 200) -> list[dict]:
-    return _decorate(appointment_dao.list_unassigned(limit=limit))
+    return list_filtered(limit=limit, only_unassigned=True)
 
 
 def update_status(appointment_id: int, status_label: str) -> None:

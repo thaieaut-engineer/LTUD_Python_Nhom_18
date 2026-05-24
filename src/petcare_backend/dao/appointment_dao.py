@@ -100,9 +100,46 @@ LIMIT %s
 """
 
 
+def _build_where(
+    *,
+    employee_id: int | None = None,
+    only_unassigned: bool = False,
+    status_scope: str | None = None,
+) -> tuple[str, list[Any]]:
+    """status_scope: 'active' | 'history' | None (all)."""
+    clauses: list[str] = []
+    params: list[Any] = []
+    if only_unassigned:
+        clauses.append("a.employee_id IS NULL")
+    elif employee_id is not None:
+        clauses.append("a.employee_id = %s")
+        params.append(int(employee_id))
+    if status_scope == "active":
+        clauses.append("a.status IN ('CHO_XU_LY', 'DANG_THUC_HIEN')")
+    elif status_scope == "history":
+        clauses.append("a.status IN ('HOAN_THANH', 'HUY')")
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    return where, params
+
+
+def list_filtered(
+    limit: int = 100,
+    *,
+    employee_id: int | None = None,
+    only_unassigned: bool = False,
+    status_scope: str | None = None,
+) -> list[dict[str, Any]]:
+    where, params = _build_where(
+        employee_id=employee_id,
+        only_unassigned=only_unassigned,
+        status_scope=status_scope,
+    )
+    sql = _SUMMARY_SQL.format(where_clause=where)
+    return fetch_all(sql, (*params, int(limit)))
+
+
 def list_recent(limit: int = 100) -> list[dict[str, Any]]:
-    sql = _SUMMARY_SQL.format(where_clause="")
-    return fetch_all(sql, (int(limit),))
+    return list_filtered(limit=limit)
 
 
 def list_by_customer(customer_id: int, limit: int = 200) -> list[dict[str, Any]]:
@@ -111,10 +148,8 @@ def list_by_customer(customer_id: int, limit: int = 200) -> list[dict[str, Any]]
 
 
 def list_by_employee(employee_id: int, limit: int = 200) -> list[dict[str, Any]]:
-    sql = _SUMMARY_SQL.format(where_clause="WHERE a.employee_id = %s")
-    return fetch_all(sql, (employee_id, int(limit)))
+    return list_filtered(limit=limit, employee_id=int(employee_id))
 
 
 def list_unassigned(limit: int = 200) -> list[dict[str, Any]]:
-    sql = _SUMMARY_SQL.format(where_clause="WHERE a.employee_id IS NULL")
-    return fetch_all(sql, (int(limit),))
+    return list_filtered(limit=limit, only_unassigned=True)
