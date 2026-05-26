@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, QDateTime, QEvent, QObject, QSize, QTimer
-from PyQt6.QtGui import QColor, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -1210,6 +1210,8 @@ class PetCareApp(QMainWindow):
             ["Loại", "Thú cưng", "Tên dịch vụ / sản phẩm", "SL", "Đơn giá", "Thành tiền", ""]
         )
         self._setup_table(table)
+        table.setIconSize(QSize(26, 26))
+        table.verticalHeader().setDefaultSectionSize(50)
         root.addWidget(table, 1)
 
         # Tom tat
@@ -1228,7 +1230,16 @@ class PetCareApp(QMainWindow):
                 table.setItem(r, 0, t_item)
                 table.setItem(r, 1, QTableWidgetItem(str(it.get("pet_name") or "—")))
                 name_txt = str(it.get("item_name") or it.get("service_name") or it.get("product_name") or "")
-                table.setItem(r, 2, QTableWidgetItem(name_txt))
+                name_item = QTableWidgetItem(name_txt)
+                if t == "PRODUCT":
+                    pid_raw = it.get("product_id")
+                    pid = int(pid_raw) if pid_raw is not None else None
+                    name_item.setIcon(
+                        self._product_thumb_icon(
+                            pid, str(it.get("product_category") or ""), 26
+                        )
+                    )
+                table.setItem(r, 2, name_item)
                 table.setItem(r, 3, QTableWidgetItem(str(it.get("quantity", ""))))
                 table.setItem(r, 4, QTableWidgetItem(f"{int(float(it.get('unit_price') or 0)):,}đ".replace(",", ".")))
                 table.setItem(r, 5, QTableWidgetItem(f"{int(float(it.get('line_total') or 0)):,}đ".replace(",", ".")))
@@ -1319,25 +1330,80 @@ class PetCareApp(QMainWindow):
             QMessageBox.information(parent, "Sản phẩm", "Chưa có sản phẩm nào.")
             return
 
+        prod_by_id = {int(p.id): p for p in products}
+
         dlg = QDialog(parent)
         dlg.setWindowTitle("Thêm sản phẩm vào hoá đơn")
-        dlg.setMinimumWidth(520)
+        dlg.setMinimumWidth(560)
         self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
 
         layout = QVBoxLayout(dlg)
-        form = QFormLayout()
+        layout.setSpacing(12)
+
+        pick_row = QHBoxLayout()
+        pick_row.setSpacing(14)
+        preview = QLabel()
+        preview.setFixedSize(76, 76)
+        preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview.setStyleSheet(
+            "background:#FFFFFF;border:1px solid #D6E2F7;border-radius:12px;"
+        )
+        pick_row.addWidget(preview, 0, Qt.AlignmentFlag.AlignTop)
+
+        form_wrap = QWidget()
+        form = QFormLayout(form_wrap)
+        form.setContentsMargins(0, 0, 0, 0)
         prod_combo = QComboBox()
+        prod_combo.setIconSize(QSize(28, 28))
+        prod_combo.setStyleSheet(
+            "QComboBox{min-height:36px;padding:4px 8px 4px 6px;font:600 10pt 'Segoe UI';}"
+        )
         for p in products:
+            cat_lbl = product_service.CATEGORY_LABELS.get(p.category, p.category)
             prod_combo.addItem(
-                f"{p.name} — {int(p.price):,}đ (kho: {p.stock})".replace(",", "."),
+                f"{self._product_placeholder_emoji(p.category)} {p.name} — "
+                f"{int(p.price):,}đ (kho: {p.stock})".replace(",", "."),
                 int(p.id),
             )
+            ix = prod_combo.count() - 1
+            prod_combo.setItemIcon(
+                ix, self._product_thumb_icon(p.id, p.category, 28)
+            )
+            prod_combo.setItemData(ix, cat_lbl, Qt.ItemDataRole.UserRole + 1)
         qty = QSpinBox()
         qty.setRange(1, 100)
         qty.setValue(1)
+        cat_hint = QLabel("")
+        cat_hint.setStyleSheet(
+            f"color:{THEME.muted};font:600 9pt 'Segoe UI';"
+        )
         form.addRow("Sản phẩm *", prod_combo)
+        form.addRow("", cat_hint)
         form.addRow("Số lượng *", qty)
-        layout.addLayout(form)
+        pick_row.addWidget(form_wrap, 1)
+        layout.addLayout(pick_row)
+
+        img_note = QLabel(
+            "Ảnh lấy từ trang Sản phẩm (nút ảnh trên thẻ). Chưa có ảnh thì hiện 🍖 đồ ăn / 🎀 phụ kiện."
+        )
+        img_note.setWordWrap(True)
+        img_note.setStyleSheet("color:#64748B;font:600 8pt 'Segoe UI';")
+        layout.addWidget(img_note)
+
+        def _sync_product_preview() -> None:
+            pid = prod_combo.currentData()
+            p = prod_by_id.get(int(pid)) if isinstance(pid, int) else None
+            if p is None:
+                preview.clear()
+                cat_hint.setText("")
+                return
+            preview.setPixmap(self._product_thumb_pixmap(p.id, p.category, 72))
+            cat_hint.setText(
+                product_service.CATEGORY_LABELS.get(p.category, p.category)
+            )
+
+        prod_combo.currentIndexChanged.connect(lambda _i: _sync_product_preview())
+        _sync_product_preview()
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
@@ -1879,6 +1945,241 @@ class PetCareApp(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Chi tiết lịch hẹn", f"Không mở được chi tiết:\n{exc}")
 
+    def _create_appointment_retail_section(
+        self, appt_id: int, dlg: QDialog
+    ) -> tuple[QFrame, object]:
+        """Khối đồ ăn / phụ kiện trên HĐ dịch vụ (chỉ lịch Hoàn thành). Trả về (card, refresh)."""
+        from src.petcare_backend.dao import invoice_dao, invoice_item_dao
+
+        _CAT_LABELS = {"DO_AN": "Đồ ăn", "PHU_KIEN": "Phụ kiện"}
+
+        card = QFrame()
+        card.setStyleSheet(
+            "QFrame{background:rgba(255,255,255,0.94);border:1px solid #D6E2F7;border-radius:12px;}"
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        title_row = QHBoxLayout()
+        title = QLabel("🛒 Đồ ăn & phụ kiện")
+        title.setStyleSheet("font:800 11pt 'Segoe UI'; color:#0F172A;")
+        title_row.addWidget(title)
+        title_row.addStretch(1)
+        inv_meta = QLabel("")
+        inv_meta.setStyleSheet("font:700 9pt 'Segoe UI'; color:#64748B;")
+        title_row.addWidget(inv_meta)
+        layout.addLayout(title_row)
+
+        hint = QLabel("")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#64748B;font:600 9pt 'Segoe UI';")
+        layout.addWidget(hint)
+
+        prod_table = QTableWidget()
+        prod_table.setColumnCount(5)
+        prod_table.setHorizontalHeaderLabels(
+            ["Loại", "Sản phẩm", "SL", "Đơn giá", "T.Tiền"]
+        )
+        self._setup_table(prod_table)
+        prod_table.setVisible(False)
+        layout.addWidget(prod_table)
+
+        total_lbl = QLabel("")
+        total_lbl.setStyleSheet(
+            f"font:800 10pt 'Segoe UI'; color:{THEME.accent_strong};"
+        )
+        layout.addWidget(total_lbl)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        layout.addLayout(btn_row)
+
+        _btn_primary = (
+            f"QPushButton{{background:{THEME.primary};color:#FFF;border:none;"
+            f"padding:8px 14px;border-radius:8px;font:800 9pt 'Segoe UI';}}"
+            f"QPushButton:hover{{background:{THEME.primary_hover};}}"
+        )
+        _btn_secondary = (
+            f"QPushButton{{background:#FFFFFF;color:{THEME.accent};"
+            f"border:1px solid {THEME.accent};padding:8px 14px;border-radius:8px;"
+            f"font:800 9pt 'Segoe UI';}}"
+            f"QPushButton:hover{{background:{THEME.accent_soft};}}"
+        )
+        _btn_ghost = (
+            "QPushButton{background:#F8FAFC;color:#334155;border:1px solid #CBD5E1;"
+            "padding:8px 14px;border-radius:8px;font:700 9pt 'Segoe UI';}"
+            "QPushButton:hover{background:#E2E8F0;}"
+        )
+
+        def _clear_buttons() -> None:
+            while btn_row.count():
+                item = btn_row.takeAt(0)
+                w = item.widget()
+                if w is not None:
+                    w.deleteLater()
+
+        def refresh() -> None:
+            _clear_buttons()
+            prod_table.setRowCount(0)
+            prod_table.setVisible(False)
+            prod_table.setFixedHeight(0)
+            prod_table.setMaximumHeight(0)
+            hint.setVisible(True)
+            total_lbl.setText("")
+            total_lbl.setVisible(False)
+            inv_meta.setText("")
+
+            inv = invoice_dao.get_by_appointment(appt_id)
+            if inv is None:
+                hint.setText(
+                    "Chưa có hóa đơn. Tạo hóa đơn dịch vụ để thêm đồ ăn / phụ kiện kèm theo lịch hẹn."
+                )
+                btn_create = QPushButton("Tạo hóa đơn")
+                btn_create.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn_create.setStyleSheet(_btn_primary)
+
+                def _on_create() -> None:
+                    try:
+                        inv_id = invoice_service.create_from_appointment(appt_id)
+                    except invoice_service.InvoiceError as exc:
+                        QMessageBox.warning(dlg, "Tạo hóa đơn", str(exc))
+                        return
+                    except Exception as exc:
+                        QMessageBox.warning(dlg, "Tạo hóa đơn", str(exc))
+                        return
+                    QMessageBox.information(
+                        dlg, "Tạo hóa đơn", f"Đã tạo hóa đơn #{inv_id}."
+                    )
+                    self._reload_invoices_table()
+                    refresh()
+
+                btn_create.clicked.connect(_on_create)
+                btn_row.addWidget(btn_create)
+                btn_row.addStretch(1)
+                return
+
+            inv_id = int(inv["id"])
+            inv_no = str(inv.get("invoice_no") or inv_id)
+            pay = str(inv.get("payment_status") or "")
+            pay_txt = "Đã TT" if pay == "DA_TT" else "Chưa TT"
+            pay_color = THEME.success if pay == "DA_TT" else THEME.warning
+            inv_meta.setText(f"HĐ {inv_no}  •  {pay_txt}")
+            inv_meta.setStyleSheet(f"font:700 9pt 'Segoe UI'; color:{pay_color};")
+
+            items = [
+                it
+                for it in invoice_item_dao.list_by_invoice(inv_id)
+                if str(it.get("item_type") or "") == "PRODUCT"
+            ]
+
+            if not items:
+                if pay == "DA_TT":
+                    hint.setText(
+                        "Hóa đơn đã thanh toán — không thể thêm đồ ăn / phụ kiện sau khi đã TT. "
+                        "Lần sau: bấm 「＋ Thêm sản phẩm」 trước khi thanh toán."
+                    )
+                    hint.setStyleSheet(
+                        f"color:{THEME.warning};font:600 9pt 'Segoe UI';"
+                        "background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px 10px;"
+                    )
+                else:
+                    hint.setText(
+                        "Chưa có sản phẩm. Bấm nút 「＋ Thêm sản phẩm」 bên dưới "
+                        "(hoặc 「Mở hóa đơn」 → Thêm sản phẩm)."
+                    )
+                    hint.setStyleSheet("color:#64748B;font:600 9pt 'Segoe UI';")
+            else:
+                hint.setVisible(False)
+                prod_table.setVisible(True)
+                prod_table.setMaximumHeight(16777215)
+                prod_vh = prod_table.verticalHeader()
+                prod_vh.setDefaultSectionSize(52)
+                prod_table.setIconSize(QSize(26, 26))
+                prod_table.setRowCount(len(items))
+                prod_subtotal = 0.0
+                for r, it in enumerate(items):
+                    cat = _CAT_LABELS.get(
+                        str(it.get("product_category") or ""), "Sản phẩm"
+                    )
+                    qty = int(it.get("quantity") or 1)
+                    unit = float(it.get("unit_price") or 0)
+                    line = float(it.get("line_total") or qty * unit)
+                    prod_subtotal += line
+                    cat_item = QTableWidgetItem(cat)
+                    cat_item.setForeground(
+                        QColor(
+                            THEME.stat_orange
+                            if str(it.get("product_category")) == "DO_AN"
+                            else THEME.accent
+                        )
+                    )
+                    prod_table.setItem(r, 0, cat_item)
+                    pid_raw = it.get("product_id")
+                    pid = int(pid_raw) if pid_raw is not None else None
+                    cat_key = str(it.get("product_category") or "")
+                    name_item = QTableWidgetItem(str(it.get("item_name") or ""))
+                    name_item.setIcon(
+                        self._product_thumb_icon(pid, cat_key, 26)
+                    )
+                    prod_table.setItem(r, 1, name_item)
+                    prod_table.setItem(r, 2, QTableWidgetItem(str(qty)))
+                    prod_table.setItem(r, 3, QTableWidgetItem(self._format_vnd(unit)))
+                    prod_table.setItem(r, 4, QTableWidgetItem(self._format_vnd(line)))
+
+                ph = prod_table.horizontalHeader()
+                ph.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+                ph.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+                ph.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+                ph.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+                ph.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+                row_h = max(len(items), 1)
+                prod_table.setFixedHeight(40 + row_h * 44)
+
+                total_lbl.setVisible(True)
+                total_lbl.setText(
+                    f"Tổng sản phẩm: {self._format_vnd(prod_subtotal)}  •  "
+                    f"Tổng HĐ: {self._format_vnd(inv.get('total_amount'))}  ({pay_txt})"
+                )
+
+            if pay != "DA_TT":
+                btn_add = QPushButton("＋ Thêm sản phẩm")
+                btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn_add.setStyleSheet(_btn_secondary)
+                btn_add.clicked.connect(
+                    lambda: self._add_product_to_invoice_dialog(
+                        inv_id, dlg, refresh
+                    )
+                )
+                btn_row.addWidget(btn_add)
+
+                btn_pay = QPushButton("Thanh toán")
+                btn_pay.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn_pay.setStyleSheet(_btn_primary)
+
+                def _on_pay() -> None:
+                    self._show_payment_dialog(inv_id)
+                    refresh()
+
+                btn_pay.clicked.connect(_on_pay)
+                btn_row.addWidget(btn_pay)
+
+            btn_open = QPushButton("Mở hóa đơn")
+            btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_open.setStyleSheet(_btn_ghost)
+
+            def _on_open() -> None:
+                self._show_invoice_detail(inv_id)
+                refresh()
+
+            btn_open.clicked.connect(_on_open)
+            btn_row.addWidget(btn_open)
+
+            btn_row.addStretch(1)
+
+        refresh()
+        return card, refresh
+
     def _show_appointment_detail_dialog(self, row: int) -> None:
         from src.petcare_backend.dao import appointment_service_dao
 
@@ -1897,7 +2198,7 @@ class PetCareApp(QMainWindow):
             f"{'Xem chi tiết' if is_history else 'Chi tiết lịch hẹn'} #{a.get('appointment_id', '')}"
         )
         dlg.setFixedWidth(780)
-        dlg.setMaximumHeight(760)
+        dlg.setMaximumHeight(860)
         self._install_pet_background(dlg, overlay_color=(239, 246, 255, 175))
 
         outer = QVBoxLayout(dlg)
@@ -2141,6 +2442,12 @@ class PetCareApp(QMainWindow):
         svc_layout.addWidget(summary_frame)
         root.addWidget(svc_card)
 
+        if current_status == "Hoàn thành" and appt_id > 0:
+            retail_card, _refresh_retail = self._create_appointment_retail_section(
+                appt_id, dlg
+            )
+            root.addWidget(retail_card)
+
         result_row = QHBoxLayout()
         result_row.setSpacing(6)
         result_lbl = QLabel("Kết quả dịch vụ")
@@ -2207,7 +2514,7 @@ class PetCareApp(QMainWindow):
         outer.addLayout(btn_bar)
 
         dlg.adjustSize()
-        dlg.setFixedHeight(min(dlg.sizeHint().height() + 8, 760))
+        dlg.setFixedHeight(min(dlg.sizeHint().height() + 8, 860))
         dlg.exec()
 
     @staticmethod
@@ -3165,16 +3472,9 @@ class PetCareApp(QMainWindow):
                 "QPushButton:hover{background:#D1E8DF; border-color:" + THEME.primary + ";}"
             )
             img_btn.setToolTip("Chọn ảnh (lưu tạm trong phiên)")
-            ph = self._product_placeholder_emoji(p.category)
-            img_path = self._product_images.get(p.id)
-            if img_path and os.path.exists(img_path):
-                pix = QPixmap(img_path)
-                if not pix.isNull():
-                    img_btn.setIcon(QIcon(pix))
-                    img_btn.setIconSize(QSize(thumb - 6, thumb - 6))
-                    img_btn.setText("")
-            else:
-                img_btn.setText(ph)
+            img_btn.setIcon(self._product_thumb_icon(p.id, p.category, thumb - 6))
+            img_btn.setIconSize(QSize(thumb - 6, thumb - 6))
+            img_btn.setText("")
             row_lay.addWidget(img_btn, 0, Qt.AlignmentFlag.AlignTop)
 
             right = QWidget()
@@ -3289,6 +3589,52 @@ class PetCareApp(QMainWindow):
         if category == "PHU_KIEN":
             return "🎀"
         return "🛒"
+
+    def _product_category_bg(self, category: str) -> str:
+        if category == "DO_AN":
+            return "#FEF3C7"
+        if category == "PHU_KIEN":
+            return "#DBEAFE"
+        return "#F1F5F9"
+
+    def _product_thumb_pixmap(
+        self,
+        product_id: int | None,
+        category: str,
+        size: int = 48,
+    ) -> QPixmap:
+        px = max(24, int(size))
+        if product_id is not None:
+            path = self._product_images.get(int(product_id))
+            if path and os.path.exists(path):
+                raw = QPixmap(path)
+                if not raw.isNull():
+                    return raw.scaled(
+                        px,
+                        px,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+        pix = QPixmap(px, px)
+        pix.fill(QColor(self._product_category_bg(category)))
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setFont(QFont("Segoe UI Emoji", max(14, px // 2)))
+        painter.drawText(
+            pix.rect(),
+            int(Qt.AlignmentFlag.AlignCenter),
+            self._product_placeholder_emoji(category),
+        )
+        painter.end()
+        return pix
+
+    def _product_thumb_icon(
+        self,
+        product_id: int | None,
+        category: str,
+        size: int = 48,
+    ) -> QIcon:
+        return QIcon(self._product_thumb_pixmap(product_id, category, size))
 
     def _on_product_image_pick(self, product_id: int) -> None:
         if next((x for x in self._products_list if x.id == product_id), None) is None:
