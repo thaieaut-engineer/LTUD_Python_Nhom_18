@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, QDateTime, QEvent, QObject, QSize, QTimer
+from PyQt6.QtCore import Qt, QDateTime, QEvent, QObject, QThread, QSize, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -390,6 +390,24 @@ def _wrap_action_buttons(
     return w
 
 
+class _LoginWorker(QThread):
+    """Dang nhap tren luong phu — tranh 'Not Responding' khi MySQL cham/khong ket noi."""
+
+    finished_with_result = pyqtSignal(object, object)
+
+    def __init__(self, username: str, password: str) -> None:
+        super().__init__()
+        self._username = username
+        self._password = password
+
+    def run(self) -> None:
+        try:
+            user = auth_service.login(self._username, self._password)
+            self.finished_with_result.emit(user, None)
+        except Exception as exc:
+            self.finished_with_result.emit(None, exc)
+
+
 class PetBackground(QLabel):
     """Ảnh nền thú cưng tự động scale theo kích thước parent (cover + overlay)."""
 
@@ -470,6 +488,8 @@ class PetCareApp(QMainWindow):
         self._per_pet_service_rows_layout: QVBoxLayout | None = None
         self._per_pet_service_combos: dict[str, QComboBox] = {}
         self._products_viewport: QWidget | None = None
+        self._invoice_payment_mode: str = "unpaid"
+        self._login_worker: _LoginWorker | None = None
 
         self._bg_path: str = background_image_path()
 
@@ -487,7 +507,6 @@ class PetCareApp(QMainWindow):
         self._install_backgrounds()
 
         self._load_pages()
-        self._set_active("dashboard")
         # Chi khoi tao UI pages; du lieu se load tu MySQL sau khi dang nhap thanh cong.
         self._init_catalog_pages()
 
@@ -744,13 +763,16 @@ class PetCareApp(QMainWindow):
                 inv_page.createRetailButton.clicked.connect(self._show_retail_pos_dialog)
             if hasattr(inv_page, "typeFilterCombo"):
                 combo = inv_page.typeFilterCombo
+                combo.blockSignals(True)
                 combo.clear()
                 combo.addItem("Tất cả hoá đơn", "")
                 combo.addItem("HĐ Dịch vụ", "SERVICE")
                 combo.addItem("HĐ Bán lẻ", "RETAIL")
+                combo.blockSignals(False)
                 combo.currentIndexChanged.connect(lambda _: self._reload_invoices_table())
             if hasattr(inv_page, "searchEdit"):
                 inv_page.searchEdit.textChanged.connect(lambda _: self._reload_invoices_table())
+            self._setup_invoice_payment_tabs(inv_page)
             self._install_invoices_table(inv_page)
 
         emp_page = self._pages.get("employees")
@@ -765,18 +787,28 @@ class PetCareApp(QMainWindow):
             if hasattr(emp_page, "addEmployeeButton"):
                 emp_page.addEmployeeButton.clicked.connect(self._on_add_employee_clicked)
 
+    @staticmethod
+    def _has_active_session() -> bool:
+        return Session.current() is not None
+
     def _reload_catalog_data(self) -> None:
         """Load khach hang/thu cung/dich vu/san pham tu MySQL va render UI."""
-        self._reload_employees()
-        self._reload_customers(None)
-        self._reload_services()
-        self._reload_products()
-        self._reload_pets()
-        self._refresh_pets_customer_filter()
-        self._refresh_appointments_customer_combo()
-        self._refresh_appointments_employee_filter()
-        self._reload_appointments_table()
-        self._reload_invoices_table()
+        if not self._has_active_session():
+            return
+        steps = (
+            self._reload_employees,
+            lambda: self._reload_customers(None),
+            self._reload_services,
+            self._reload_products,
+            self._reload_pets,
+            self._refresh_pets_customer_filter,
+            self._refresh_appointments_customer_combo,
+            self._refresh_appointments_employee_filter,
+            self._reload_appointments_table,
+            self._reload_invoices_table,
+        )
+        for step in steps:
+            step()
 
         dash = self._pages.get("dashboard")
         if isinstance(dash, DashboardView):
@@ -785,12 +817,38 @@ class PetCareApp(QMainWindow):
             except Exception:
                 pass
 
-    def _install_invoices_table(self, inv_page: QWidget) -> None:
-        """Invoices UI chi co emptyLabel -> chen runtime table."""
-        if hasattr(inv_page, "invoicesTable"):
+    def _strip_invoice_page_placeholders(self, inv_page: QWidget) -> None:
+        """Go spacer/emptyLabel trong .ui (gay khoang trong lon truoc bang)."""
+        vlay = inv_page.layout()
+        if not isinstance(vlay, QVBoxLayout):
             return
+        remove_idx: list[int] = []
+        for i in range(vlay.count()):
+            item = vlay.itemAt(i)
+            if item is None:
+                continue
+            if item.spacerItem() is not None:
+                remove_idx.append(i)
+                continue
+            w = item.widget()
+            if w is not None and w.objectName() == "emptyLabel":
+                remove_idx.append(i)
+        for i in reversed(remove_idx):
+            taken = vlay.takeAt(i)
+            if taken is None:
+                continue
+            w = taken.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+
+    def _install_invoices_table(self, inv_page: QWidget) -> None:
+        """Chen bang hoa don; xoa placeholder spacer trong .ui."""
         layout = inv_page.layout()
-        if layout is None:
+        if not isinstance(layout, QVBoxLayout):
+            return
+        self._strip_invoice_page_placeholders(inv_page)
+        if hasattr(inv_page, "invoicesTable"):
             return
         table = QTableWidget()
         table.setObjectName("invoicesTable")
@@ -809,13 +867,16 @@ class PetCareApp(QMainWindow):
         )
         self._setup_table(table)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         layout.addWidget(table, 1)
         inv_page.invoicesTable = table  # type: ignore[attr-defined]
 
-        if hasattr(inv_page, "emptyLabel"):
-            inv_page.emptyLabel.setVisible(False)
-
     def _reload_invoices_table(self) -> None:
+        if not self._has_active_session():
+            return
         inv_page = self._pages.get("invoices")
         if not inv_page or not hasattr(inv_page, "invoicesTable"):
             return
@@ -838,6 +899,15 @@ class PetCareApp(QMainWindow):
                     if q in str(r.get("invoice_no") or "").lower()
                     or q in str(r.get("customer_name") or "").lower()
                 ]
+
+        want_pay = (
+            "DA_TT" if getattr(self, "_invoice_payment_mode", "unpaid") == "paid" else "CHUA_TT"
+        )
+        rows = [
+            r
+            for r in rows
+            if str(r.get("payment_status") or "CHUA_TT") == want_pay
+        ]
 
         self._invoice_rows = rows  # type: ignore[attr-defined]
 
@@ -866,7 +936,9 @@ class PetCareApp(QMainWindow):
             table.setCellWidget(
                 r,
                 7,
-                self._make_invoice_actions(invoice_id=invoice_id),
+                self._make_invoice_actions(
+                    invoice_id=invoice_id, payment_status=status
+                ),
             )
 
         hdr = table.horizontalHeader()
@@ -880,7 +952,9 @@ class PetCareApp(QMainWindow):
         hdr.setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
         table.setColumnWidth(7, 260)
 
-    def _make_invoice_actions(self, *, invoice_id: int) -> QWidget:
+    def _make_invoice_actions(
+        self, *, invoice_id: int, payment_status: str = "CHUA_TT"
+    ) -> QWidget:
         btn_view = _build_action_icon_button(
             _action_icon("view", "#3730A3"),
             "Xem chi tiết",
@@ -890,10 +964,71 @@ class PetCareApp(QMainWindow):
         )
         btn_view.clicked.connect(lambda: self._show_invoice_detail(invoice_id))
 
-        btn_pay = _build_action_button("Thanh toán", "#DCFCE7", "#166534", hover="#BBF7D0")
-        btn_pay.clicked.connect(lambda: self._show_payment_dialog(invoice_id))
+        actions: list[QWidget] = [btn_view]
+        if payment_status != "DA_TT":
+            btn_pay = _build_action_button(
+                "Thanh toán", "#DCFCE7", "#166534", hover="#BBF7D0"
+            )
+            btn_pay.clicked.connect(lambda: self._show_payment_dialog(invoice_id))
+            actions.append(btn_pay)
 
-        return _wrap_action_buttons([btn_view, btn_pay])
+        return _wrap_action_buttons(actions)
+
+    def _setup_invoice_payment_tabs(self, inv_page: QWidget) -> None:
+        if getattr(inv_page, "_invoice_pay_tabs_ready", False):
+            return
+        vlay = inv_page.layout()
+        if not isinstance(vlay, QVBoxLayout):
+            return
+
+        tab_bar = QWidget()
+        tab_lay = QHBoxLayout(tab_bar)
+        tab_lay.setContentsMargins(0, 0, 0, 0)
+        tab_lay.setSpacing(8)
+
+        btn_unpaid = QPushButton("Chưa thanh toán")
+        btn_unpaid.setObjectName("tabInvoiceUnpaidButton")
+        btn_unpaid.setCheckable(True)
+        btn_unpaid.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_unpaid.setStyleSheet(_APPT_TAB_BTN_QSS)
+
+        btn_paid = QPushButton("Đã thanh toán")
+        btn_paid.setObjectName("tabInvoicePaidButton")
+        btn_paid.setCheckable(True)
+        btn_paid.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_paid.setStyleSheet(_APPT_TAB_BTN_QSS)
+
+        tab_lay.addWidget(btn_unpaid)
+        tab_lay.addWidget(btn_paid)
+        tab_lay.addStretch(1)
+
+        insert_at = 1
+        if hasattr(inv_page, "invoiceFilterLayout"):
+            for i in range(vlay.count()):
+                item = vlay.itemAt(i)
+                if item and item.layout() is inv_page.invoiceFilterLayout:  # type: ignore[attr-defined]
+                    insert_at = i
+                    break
+        vlay.insertWidget(insert_at, tab_bar)
+
+        inv_page.tabInvoiceUnpaidButton = btn_unpaid  # type: ignore[attr-defined]
+        inv_page.tabInvoicePaidButton = btn_paid  # type: ignore[attr-defined]
+        inv_page._invoice_pay_tabs_ready = True  # type: ignore[attr-defined]
+
+        btn_unpaid.setChecked(True)
+        btn_unpaid.clicked.connect(lambda: self._set_invoice_payment_mode("unpaid"))
+        btn_paid.clicked.connect(lambda: self._set_invoice_payment_mode("paid"))
+
+    def _set_invoice_payment_mode(self, mode: str) -> None:
+        self._invoice_payment_mode = mode
+        inv_page = self._pages.get("invoices")
+        if inv_page:
+            is_unpaid = mode == "unpaid"
+            if hasattr(inv_page, "tabInvoiceUnpaidButton"):
+                inv_page.tabInvoiceUnpaidButton.setChecked(is_unpaid)  # type: ignore[attr-defined]
+            if hasattr(inv_page, "tabInvoicePaidButton"):
+                inv_page.tabInvoicePaidButton.setChecked(not is_unpaid)  # type: ignore[attr-defined]
+        self._reload_invoices_table()
 
     def _show_invoice_center(self) -> None:
         """Nut 'Tao hoa don' -> mo dialog chon appointment hoan thanh chua co invoice."""
@@ -1530,7 +1665,16 @@ class PetCareApp(QMainWindow):
         root.addWidget(buttons)
 
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._reload_invoices_table()
+            inv_after = invoice_dao.get_by_id(invoice_id)
+            if inv_after and str(inv_after.get("payment_status") or "") == "DA_TT":
+                self._set_invoice_payment_mode("paid")
+                QMessageBox.information(
+                    self,
+                    "Thanh toán",
+                    "Đã thanh toán xong. Hóa đơn chuyển sang tab 「Đã thanh toán」.",
+                )
+            else:
+                self._reload_invoices_table()
 
     def _insert_add_customer_button(self, customers_page: QWidget) -> None:
         """CustomersPage khong co nut 'Them' trong .ui, nen chen runtime."""
@@ -1873,6 +2017,8 @@ class PetCareApp(QMainWindow):
         self._sync_appointment_detail_if_current_row(row)
 
     def _reload_appointments_table(self) -> None:
+        if not self._has_active_session():
+            return
         ap_page = self._pages.get("appointments")
         employee_id: int | None = None
         only_unassigned = False
@@ -2896,6 +3042,8 @@ class PetCareApp(QMainWindow):
     # ===================== GROUP B: CATALOG (Customer/Pet/Service) =====================
 
     def _reload_customers(self, query: str | None) -> None:
+        if not self._has_active_session():
+            return
         q = (query or "").strip()
         self._customers = list(customer_service.list_customers(q or None))
         self._render_customers_table()
@@ -2903,6 +3051,8 @@ class PetCareApp(QMainWindow):
         self._refresh_appointments_customer_combo()
 
     def _reload_services(self, query: str | None = None) -> None:
+        if not self._has_active_session():
+            return
         q = (query or "").strip() or None
         services_page = self._pages.get("services")
         # Trang dich vu: ho tro tim kiem
@@ -2936,6 +3086,8 @@ class PetCareApp(QMainWindow):
         ap_page.serviceCombo.blockSignals(False)
 
     def _reload_pets(self) -> None:
+        if not self._has_active_session():
+            return
         pets_page = self._pages.get("pets")
         selected = None
         if pets_page:
@@ -2973,6 +3125,8 @@ class PetCareApp(QMainWindow):
     # ===================== PRODUCTS (do an / phu kien) =====================
 
     def _reload_employees(self) -> None:
+        if not self._has_active_session():
+            return
         try:
             self._employees_list = list(user_service.list_employees(active_only=True))
         except Exception:
@@ -3410,6 +3564,8 @@ class PetCareApp(QMainWindow):
         dlg.exec()
 
     def _reload_products(self, query: str | None = None) -> None:
+        if not self._has_active_session():
+            return
         products_page = self._pages.get("products")
         q = (query or "").strip() or None
         if q is None and products_page and hasattr(products_page, "searchEdit"):
@@ -4386,37 +4542,67 @@ class PetCareApp(QMainWindow):
         # Backward compat: demo handler removed, use DB handler.
         self._on_confirm_appointment_db()
 
+    def _set_login_busy(self, busy: bool) -> None:
+        login_btn = getattr(self._login, "LoginButton", None)
+        if login_btn is not None:
+            login_btn.setEnabled(not busy)
+            login_btn.setText("Đang đăng nhập..." if busy else "Đăng nhập")
+        reg_btn = getattr(self._login, "registerButton", None)
+        if reg_btn is not None:
+            reg_btn.setEnabled(not busy)
+
     def _on_login(self) -> None:
+        if self._login_worker is not None and self._login_worker.isRunning():
+            return
         username = (self._login.usernameEdit.text() or "").strip()
         password = self._login.passwordEdit.text() or ""
-        try:
-            user = auth_service.login(username, password)
-        except auth_service.AuthError as exc:
-            QMessageBox.warning(self, "Đăng nhập thất bại", str(exc))
+        self._set_login_busy(True)
+        self._login_worker = _LoginWorker(username, password)
+        self._login_worker.finished_with_result.connect(self._on_login_worker_finished)
+        self._login_worker.finished.connect(self._on_login_worker_thread_done)
+        self._login_worker.start()
+
+    def _on_login_worker_thread_done(self) -> None:
+        self._login_worker = None
+
+    def _on_login_worker_finished(self, user, err) -> None:
+        self._set_login_busy(False)
+        if err is not None:
+            if isinstance(err, auth_service.AuthError):
+                QMessageBox.warning(self, "Đăng nhập thất bại", str(err))
+            else:
+                QMessageBox.critical(
+                    self,
+                    "Lỗi hệ thống",
+                    f"Không thể kết nối MySQL:\n{err}\n\n"
+                    "1. Bật MySQL (XAMPP/WAMP/service)\n"
+                    "2. Tạo file .env từ .env.example (mật khẩu root)\n"
+                    "3. Chạy: python scripts/init_db.py",
+                )
             self._login.passwordEdit.clear()
             self._login.passwordEdit.setFocus()
-            return
-        except Exception as exc:  # ket noi DB / loi he thong
-            QMessageBox.critical(
-                self,
-                "Lỗi hệ thống",
-                f"Không thể kết nối hệ thống:\n{exc}\n\n"
-                "Hãy kiểm tra MySQL đang chạy và file .env đã đúng.",
-            )
             return
 
         self._root_stack.setCurrentWidget(self._main)
         self._refresh_user_indicator(user)
         self._apply_role_visibility(user)
+        self._set_active("dashboard")
+        QTimer.singleShot(0, self._post_login_load_catalog)
+
+    def _post_login_load_catalog(self) -> None:
+        """Tai du lieu sau khi UI chinh da hien - tranh treo man hinh login."""
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             self._reload_catalog_data()
+            QApplication.processEvents()
         except Exception as exc:
             QMessageBox.warning(
                 self,
                 "Tải dữ liệu",
-                f"Đăng nhập thành công nhưng không tải được dữ liệu danh mục:\n{exc}",
+                f"Đăng nhập thành công nhưng không tải được dữ liệu:\n{exc}",
             )
-        self._set_active("dashboard")
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def _on_logout(self) -> None:
         auth_service.logout()
