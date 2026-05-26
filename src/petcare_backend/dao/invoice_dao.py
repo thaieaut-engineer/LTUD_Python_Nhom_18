@@ -43,6 +43,21 @@ def get_by_appointment(appointment_id: int) -> dict[str, Any] | None:
     return fetch_one("SELECT * FROM invoice WHERE appointment_id=%s", (appointment_id,))
 
 
+def list_appointment_ids_with_invoice() -> list[int]:
+    """ID lich hen da co hoa don dich vu (appointment_id not null)."""
+    rows = fetch_all(
+        "SELECT DISTINCT appointment_id AS appointment_id "
+        "FROM invoice WHERE appointment_id IS NOT NULL",
+        (),
+    )
+    out: list[int] = []
+    for r in rows:
+        aid = r.get("appointment_id")
+        if aid is not None:
+            out.append(int(aid))
+    return out
+
+
 def get_by_id(invoice_id: int) -> dict[str, Any] | None:
     return fetch_one("SELECT * FROM invoice WHERE id=%s", (invoice_id,))
 

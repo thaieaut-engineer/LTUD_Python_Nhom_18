@@ -908,7 +908,7 @@ class PetCareApp(QMainWindow):
         root = QVBoxLayout(dlg)
         root.setSpacing(10)
 
-        info = QLabel("Chọn lịch hẹn đã Hoàn thành để tạo hoá đơn.")
+        info = QLabel("Chọn lịch hẹn đã Hoàn thành, chưa có hoá đơn.")
         info.setStyleSheet("color:#334155; font:700 9pt 'Segoe UI';")
         root.addWidget(info)
 
@@ -918,24 +918,27 @@ class PetCareApp(QMainWindow):
         self._setup_table(table)
         root.addWidget(table, 1)
 
-        # load candidates
-        rows = appointment_service.list_recent(limit=200)
-        candidates = []
-        for a in rows:
-            if a.get("status") == "HOAN_THANH":
-                candidates.append(a)
-        table.setRowCount(len(candidates))
-        for r, a in enumerate(candidates):
-            appt_id = int(a["appointment_id"])
-            table.setItem(r, 0, QTableWidgetItem(str(appt_id)))
-            when_txt = a["scheduled_at"].strftime("%d/%m/%Y %H:%M") if a.get("scheduled_at") else ""
-            table.setItem(r, 1, QTableWidgetItem(when_txt))
-            table.setItem(r, 2, QTableWidgetItem(str(a.get("customer_name", ""))))
-            table.setItem(r, 3, QTableWidgetItem(str(a.get("pet_name", ""))))
-            table.setItem(r, 4, QTableWidgetItem(str(a.get("service_name", ""))))
-            table.setItem(r, 5, QTableWidgetItem(str(a.get("status_label", ""))))
-            # store id
-            table.item(r, 0).setData(Qt.ItemDataRole.UserRole, appt_id)
+        empty_lbl = QLabel("")
+        empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_lbl.setStyleSheet("color:#64748B;font:700 10pt 'Segoe UI';padding:24px;")
+        empty_lbl.setVisible(False)
+        root.addWidget(empty_lbl)
+
+        from src.petcare_backend.dao import invoice_dao
+
+        invoiced_ids = set(invoice_dao.list_appointment_ids_with_invoice())
+
+        def _load_candidates() -> list[dict]:
+            rows = appointment_service.list_recent(limit=200)
+            out: list[dict] = []
+            for a in rows:
+                if a.get("status") != "HOAN_THANH":
+                    continue
+                appt_id = int(a["appointment_id"])
+                if appt_id in invoiced_ids:
+                    continue
+                out.append(a)
+            return out
 
         hdr = table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
@@ -954,6 +957,37 @@ class PetCareApp(QMainWindow):
             cancel_btn.setText("Huỷ")
         buttons.rejected.connect(dlg.reject)
 
+        def _fill_table(candidates: list[dict]) -> None:
+            table.setRowCount(len(candidates))
+            for r, a in enumerate(candidates):
+                appt_id = int(a["appointment_id"])
+                table.setItem(r, 0, QTableWidgetItem(str(appt_id)))
+                when_txt = (
+                    a["scheduled_at"].strftime("%d/%m/%Y %H:%M")
+                    if a.get("scheduled_at")
+                    else ""
+                )
+                table.setItem(r, 1, QTableWidgetItem(when_txt))
+                table.setItem(r, 2, QTableWidgetItem(str(a.get("customer_name", ""))))
+                table.setItem(r, 3, QTableWidgetItem(str(a.get("pet_name", ""))))
+                table.setItem(r, 4, QTableWidgetItem(str(a.get("service_name", ""))))
+                table.setItem(r, 5, QTableWidgetItem(str(a.get("status_label", ""))))
+                table.item(r, 0).setData(Qt.ItemDataRole.UserRole, appt_id)
+
+            has_rows = len(candidates) > 0
+            table.setVisible(has_rows)
+            empty_lbl.setVisible(not has_rows)
+            if not has_rows:
+                empty_lbl.setText(
+                    "Không còn lịch hẹn nào cần tạo hoá đơn.\n"
+                    "(Các lịch đã Hoàn thành và đã có HĐ sẽ không hiển thị ở đây.)"
+                )
+            if ok_btn is not None:
+                ok_btn.setEnabled(has_rows)
+
+        candidates = _load_candidates()
+        _fill_table(candidates)
+
         def _on_ok() -> None:
             row = table.currentRow()
             if row < 0:
@@ -968,14 +1002,15 @@ class PetCareApp(QMainWindow):
             except Exception as exc:
                 QMessageBox.warning(dlg, "Tạo hoá đơn", str(exc))
                 return
-            QMessageBox.information(dlg, "Tạo hoá đơn", f"Đã tạo hoá đơn (ID: {inv_id}).")
-            dlg.accept()
+            invoiced_ids.add(appt_id)
+            QMessageBox.information(dlg, "Tạo hoá đơn", f"Đã tạo hoá đơn #{inv_id}.")
+            self._reload_invoices_table()
+            _fill_table(_load_candidates())
 
         buttons.accepted.connect(_on_ok)
         root.addWidget(buttons)
 
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self._reload_invoices_table()
+        dlg.exec()
 
     def _show_retail_pos_dialog(self) -> None:
         """Dialog tao hoa don ban le (POS): chon SP + so luong, tinh tong, tao."""
