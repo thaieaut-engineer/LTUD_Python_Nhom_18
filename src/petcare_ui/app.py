@@ -79,6 +79,73 @@ _APPT_STATUS_COLORS = {
     "Hủy": THEME.danger,
 }
 
+_APPT_STATUS_ICONS = {
+    "Chờ xử lý": "🟡",
+    "Đang thực hiện": "🔵",
+    "Hoàn thành": "🟢",
+    "Hủy": "🔴",
+}
+
+_APPT_STATUS_TOGGLE_SPECS: dict[str, tuple[str, str, str]] = {
+    "Đang thực hiện": ("▶ Đang TH", THEME.accent, THEME.accent_soft),
+    "Hoàn thành": ("✓ Hoàn thành", THEME.success, THEME.success_soft),
+    "Hủy": ("✕ Hủy", THEME.danger, THEME.danger_soft),
+}
+
+_APPT_STATUS_COMBO_QSS = """
+QComboBox#AppointmentStatusCombo {
+  min-height: 28px;
+  max-height: 32px;
+  padding: 2px 8px 2px 10px;
+  font: 600 10pt 'Segoe UI';
+  border-radius: 8px;
+}
+QComboBox#AppointmentStatusCombo::drop-down {
+  width: 22px;
+}
+QComboBox#AppointmentStatusCombo QAbstractItemView::item {
+  min-height: 28px;
+  padding: 6px 10px;
+}
+"""
+
+
+def _status_display(label: str) -> str:
+    return f"{_APPT_STATUS_ICONS.get(label, '⚪')}  {label}"
+
+
+def _populate_appointment_status_combo(combo: QComboBox) -> None:
+    combo.clear()
+    for label in APPOINTMENT_STATUSES:
+        combo.addItem(_status_display(label), label)
+
+
+def _status_toggle_btn_qss(fg: str, bg_soft: str, *, active: bool) -> str:
+    if active:
+        return (
+            f"QPushButton{{background:{fg};color:#FFFFFF;border:1px solid {fg};"
+            f"border-radius:10px;padding:6px 8px;font:700 10pt 'Segoe UI';"
+            f"min-height:34px;max-height:38px;}}"
+            f"QPushButton:hover{{background:{fg};color:#FFFFFF;}}"
+        )
+    return (
+        f"QPushButton{{background:{bg_soft};color:{fg};border:1px solid {fg}66;"
+        f"border-radius:10px;padding:6px 8px;font:700 10pt 'Segoe UI';"
+        f"min-height:34px;max-height:38px;}}"
+        f"QPushButton:hover{{border:1px solid {fg};background:{fg}18;}}"
+    )
+
+
+def _appointment_info_chip(icon: str, text: str) -> QLabel:
+    lbl = QLabel(f"{icon}  {text}")
+    lbl.setStyleSheet(
+        "color:#334155;font:600 9pt 'Segoe UI';"
+        "background:rgba(255,255,255,0.94);border:1px solid #E2E8F0;"
+        "border-radius:8px;padding:5px 10px;"
+    )
+    lbl.setWordWrap(True)
+    return lbl
+
 # Nut thao tac trong bang nhan vien: global QPushButton co min-height 34px + padding lon;
 # dat trong QTableWidget de bi cat neu hang khong du cao — gon lai va can giua doc.
 _EMPLOYEE_ROW_BTN_QSS = f"""
@@ -1484,7 +1551,8 @@ class PetCareApp(QMainWindow):
                 counts[label] += 1
 
         for label, fg, bg in specs:
-            badge = QLabel(f"  {label}: {counts[label]}  ")
+            icon = _APPT_STATUS_ICONS.get(label, "")
+            badge = QLabel(f"  {icon} {label}: {counts[label]}  ")
             badge.setStyleSheet(
                 f"background:{bg}; color:{fg}; font:800 9pt 'Segoe UI';"
                 f"border:1px solid {fg}; border-radius:10px; padding:4px 8px;"
@@ -1753,9 +1821,10 @@ class PetCareApp(QMainWindow):
                 emp_item.setForeground(QColor("#94A3B8"))
             table.setItem(r, 4, emp_item)
 
-            status_item = QTableWidgetItem(str(a.get("status_label") or ""))
+            status_label = str(a.get("status_label") or "")
+            status_item = QTableWidgetItem(_status_display(status_label))
             status_item.setData(Qt.ItemDataRole.UserRole, appt_id)
-            self._colorize_status_item(status_item, str(a.get("status_label") or ""))
+            self._colorize_status_item(status_item, status_label)
             table.setItem(r, 5, status_item)
 
             res_item = QTableWidgetItem(str(a.get("note") or ""))
@@ -1788,14 +1857,16 @@ class PetCareApp(QMainWindow):
             ap_page.appointmentDetailEdit.clear()
             return
         a = rows[row]
+        st = str(a.get("status_label") or "")
+        st_icon = _APPT_STATUS_ICONS.get(st, "⚪")
         lines = [
-            f"Thời gian: {a['scheduled_at'].strftime('%d/%m/%Y %H:%M') if a.get('scheduled_at') else ''}",
-            f"Khách hàng: {a.get('customer_name','')}",
-            f"SĐT: {a.get('customer_phone','—')}",
-            f"Địa chỉ: {a.get('customer_address','—')}",
-            f"Thú cưng: {a.get('pet_name','')}",
+            f"📅 {a['scheduled_at'].strftime('%d/%m/%Y %H:%M') if a.get('scheduled_at') else ''}",
+            f"👤 {a.get('customer_name','')}",
+            f"📞 {a.get('customer_phone','—')}",
+            f"📍 {a.get('customer_address','—')}",
+            f"🐾 {a.get('pet_name','')}",
             f"Dịch vụ: {a.get('service_name','')}",
-            f"Trạng thái: {a.get('status_label','')}",
+            f"{st_icon} Trạng thái: {st}",
             "",
             "Kết quả dịch vụ:",
             str(a.get("note") or "(chưa có)"),
@@ -1858,7 +1929,9 @@ class PetCareApp(QMainWindow):
         title.setStyleSheet("font:900 12pt 'Segoe UI'; color:#FFFFFF;")
         title_row.addWidget(title)
         title_row.addStretch(1)
-        status_badge = QLabel(f" {current_status} ")
+        status_badge = QLabel(
+            f" {_APPT_STATUS_ICONS.get(current_status, '⚪')} {current_status} "
+        )
         status_badge.setStyleSheet(
             "background:rgba(255,255,255,0.18); color:#FFFFFF; font:800 8pt 'Segoe UI';"
             "border:1px solid rgba(255,255,255,0.45); border-radius:8px; padding:1px 6px;"
@@ -1866,30 +1939,41 @@ class PetCareApp(QMainWindow):
         title_row.addWidget(status_badge)
         header_layout.addLayout(title_row)
 
-        meta = QLabel(
-            f"{self._fmt_dt_safe(a.get('scheduled_at'))}  •  {a.get('customer_name','')}  •  "
-            f"{a.get('customer_phone') or '—'}  •  {a.get('employee_name') or 'Chưa phân công'}"
-        )
-        meta.setStyleSheet("color:rgba(255,255,255,0.85); font:600 10pt 'Segoe UI';")
-        meta.setWordWrap(True)
+        cust_name = str(a.get("customer_name") or "").strip() or "—"
+        meta = QLabel(f"👤 {cust_name}")
+        meta.setStyleSheet("color:rgba(255,255,255,0.92); font:700 10pt 'Segoe UI';")
         header_layout.addWidget(meta)
         root.addWidget(header_frame)
 
-        # Gộp địa chỉ (nếu có) thành 1 dòng phụ — tiết kiệm chiều cao
+        info_card = QFrame()
+        info_card.setStyleSheet(
+            "QFrame{background:rgba(255,255,255,0.55);border:1px solid #D6E2F7;border-radius:10px;}"
+        )
+        info_grid = QGridLayout(info_card)
+        info_grid.setContentsMargins(10, 8, 10, 8)
+        info_grid.setHorizontalSpacing(8)
+        info_grid.setVerticalSpacing(6)
+        scheduled_txt = self._fmt_dt_safe(a.get("scheduled_at")) or "—"
+        phone_txt = str(a.get("customer_phone") or "").strip() or "—"
+        emp_txt = str(a.get("employee_name") or "").strip() or "Chưa phân công"
         address = str(a.get("customer_address") or "").strip()
+        info_grid.addWidget(_appointment_info_chip("📅", f"Ngày hẹn: {scheduled_txt}"), 0, 0)
+        info_grid.addWidget(_appointment_info_chip("📞", f"SĐT: {phone_txt}"), 0, 1)
+        info_grid.addWidget(_appointment_info_chip("👤", f"NV: {emp_txt}"), 1, 0)
         if address:
-            addr_lbl = QLabel(f"📍 {address}")
-            addr_lbl.setStyleSheet(
-                "color:rgba(15,23,42,0.65); font:600 9pt 'Segoe UI';"
-                "background:rgba(255,255,255,0.88); border:1px solid #D6E2F7; border-radius:8px; padding:6px 10px;"
-            )
-            addr_lbl.setWordWrap(True)
-            root.addWidget(addr_lbl)
+            info_grid.addWidget(_appointment_info_chip("📍", address), 1, 1)
+        else:
+            info_grid.addWidget(_appointment_info_chip("📍", "Chưa có địa chỉ"), 1, 1)
+        info_grid.setColumnStretch(0, 1)
+        info_grid.setColumnStretch(1, 1)
+        root.addWidget(info_card)
 
         # Thao tác nhanh (chỉ lịch đang xử lý)
         status_combo = QComboBox()
-        status_combo.addItems(APPOINTMENT_STATUSES)
-        idx = status_combo.findText(current_status)
+        status_combo.setObjectName("AppointmentStatusCombo")
+        status_combo.setStyleSheet(_APPT_STATUS_COMBO_QSS)
+        _populate_appointment_status_combo(status_combo)
+        idx = status_combo.findData(current_status)
         if idx >= 0:
             status_combo.setCurrentIndex(idx)
 
@@ -1922,30 +2006,47 @@ class PetCareApp(QMainWindow):
             actions_layout.setSpacing(8)
 
             quick_grid = QGridLayout()
-            quick_grid.setSpacing(8)
-            quick_btn_qss = (
-                f"QPushButton{{background:#FFFFFF; border:1px solid {THEME.border}; border-radius:8px;"
-                f"padding:10px 12px; font:700 10pt 'Segoe UI'; color:{THEME.text}; min-height:44px; max-height:48px;}}"
-                f"QPushButton:hover{{border:1px solid {THEME.accent}; color:{THEME.accent};}}"
-            )
+            quick_grid.setSpacing(6)
+            status_toggle_btns: dict[str, QPushButton] = {}
+
+            def _sync_status_toggle_styles(selected: str) -> None:
+                for status_label, btn in status_toggle_btns.items():
+                    spec = _APPT_STATUS_TOGGLE_SPECS[status_label]
+                    _, fg, bg_soft = spec
+                    btn.setStyleSheet(
+                        _status_toggle_btn_qss(
+                            fg, bg_soft, active=(status_label == selected)
+                        )
+                    )
 
             def _set_status(label: str) -> None:
-                si = status_combo.findText(label)
+                si = status_combo.findData(label)
                 if si >= 0:
                     status_combo.setCurrentIndex(si)
+                _sync_status_toggle_styles(label)
 
-            quick_specs = [
-                ("▶ Đang TH", "Đang thực hiện"),
-                ("✓ Hoàn thành", "Hoàn thành"),
-                ("✕ Hủy", "Hủy"),
-            ]
-            for i, (btn_text, status_label) in enumerate(quick_specs):
+            for i, (status_label, (btn_text, fg, bg_soft)) in enumerate(
+                _APPT_STATUS_TOGGLE_SPECS.items()
+            ):
                 btn = QPushButton(btn_text)
-                btn.setStyleSheet(quick_btn_qss)
                 btn.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn.setEnabled(can_edit)
-                btn.clicked.connect(lambda _checked=False, s=status_label: _set_status(s))
-                quick_grid.addWidget(btn, i // 3, i % 3)
+                btn.setStyleSheet(
+                    _status_toggle_btn_qss(
+                        fg, bg_soft, active=(status_label == current_status)
+                    )
+                )
+                btn.clicked.connect(
+                    lambda _checked=False, s=status_label: _set_status(s)
+                )
+                status_toggle_btns[status_label] = btn
+                quick_grid.addWidget(btn, 0, i)
+
+            status_combo.currentIndexChanged.connect(
+                lambda _ix: _sync_status_toggle_styles(
+                    str(status_combo.currentData() or "")
+                )
+            )
 
             actions_layout.addLayout(quick_grid)
 
@@ -1955,12 +2056,15 @@ class PetCareApp(QMainWindow):
             status_lbl.setStyleSheet("color:rgba(15,23,42,0.65); font:700 10pt 'Segoe UI';")
             ctrl_row.addWidget(status_lbl)
             status_combo.setEnabled(can_edit)
-            status_combo.setMaximumHeight(42)
+            status_combo.setFixedHeight(32)
             ctrl_row.addWidget(status_combo, 1)
-            emp_lbl = QLabel("NV phụ trách")
+            emp_lbl = QLabel("👤 NV phụ trách")
             emp_lbl.setStyleSheet("color:rgba(15,23,42,0.65); font:700 10pt 'Segoe UI';")
             ctrl_row.addWidget(emp_lbl)
-            emp_combo.setMaximumHeight(42)
+            emp_combo.setFixedHeight(32)
+            emp_combo.setStyleSheet(
+                "QComboBox{min-height:28px;max-height:32px;padding:2px 8px;font:600 10pt 'Segoe UI';}"
+            )
             ctrl_row.addWidget(emp_combo, 1)
             actions_layout.addLayout(ctrl_row)
 
@@ -2072,7 +2176,7 @@ class PetCareApp(QMainWindow):
                 if appt_id <= 0:
                     QMessageBox.warning(dlg, "Lưu", "ID lịch hẹn không hợp lệ.")
                     return
-                new_status = status_combo.currentText()
+                new_status = str(status_combo.currentData() or status_combo.currentText())
                 try:
                     if is_admin:
                         new_emp = emp_combo.currentData()
