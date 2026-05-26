@@ -724,6 +724,10 @@ class PetCareApp(QMainWindow):
                 ph.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
                 ptable.setColumnWidth(6, 230)
                 ptable.cellDoubleClicked.connect(self._on_pet_image_double_clicked)
+            if hasattr(pets_page, "searchEdit"):
+                pets_page.searchEdit.textChanged.connect(
+                    lambda text: self._reload_pets(text)
+                )
             pets_page.customerFilterCombo.currentIndexChanged.connect(lambda _: self._reload_pets())
             pets_page.addPetButton.clicked.connect(self._on_add_pet_clicked)
 
@@ -3085,7 +3089,7 @@ class PetCareApp(QMainWindow):
             ap_page.serviceCombo.addItem(f"{s.name} ({int(s.price):,}đ)".replace(",", "."), s.id)
         ap_page.serviceCombo.blockSignals(False)
 
-    def _reload_pets(self) -> None:
+    def _reload_pets(self, query: str | None = None) -> None:
         if not self._has_active_session():
             return
         pets_page = self._pages.get("pets")
@@ -3094,7 +3098,10 @@ class PetCareApp(QMainWindow):
             data = pets_page.customerFilterCombo.currentData()
             if isinstance(data, int):
                 selected = data
-        self._pets = list(pet_service.list_pets(customer_id=selected))
+        q = (query or "").strip() or None
+        if q is None and pets_page and hasattr(pets_page, "searchEdit"):
+            q = (pets_page.searchEdit.text() or "").strip() or None
+        self._pets = list(pet_service.list_pets(customer_id=selected, query=q))
         self._render_pets_table()
         self._refresh_appointment_pet_list()
 
@@ -4015,12 +4022,20 @@ class PetCareApp(QMainWindow):
         table: QTableWidget = pets_page.petsTable
         owner_name = {c.id: c.full_name for c in self._customers}
         thumb = self._pets_thumb
+        search_active = False
+        if hasattr(pets_page, "searchEdit"):
+            search_active = bool((pets_page.searchEdit.text() or "").strip())
 
         if not self._pets:
             table.clearSpans()
             table.setRowCount(1)
             table.setSpan(0, 0, 1, table.columnCount())
-            empty = QTableWidgetItem("Chưa có thú cưng nào.")
+            empty_msg = (
+                "Không tìm thấy thú cưng phù hợp."
+                if search_active
+                else "Chưa có thú cưng nào."
+            )
+            empty = QTableWidgetItem(empty_msg)
             empty.setForeground(QColor("#64748B"))
             f = empty.font()
             f.setBold(True)

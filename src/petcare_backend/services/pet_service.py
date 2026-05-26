@@ -11,8 +11,8 @@ class PetError(Exception):
     pass
 
 
-def list_pets(customer_id: int | None = None):
-    return pet_dao.list_all(customer_id=customer_id)
+def list_pets(customer_id: int | None = None, query: str | None = None):
+    return pet_dao.list_all(customer_id=customer_id, query=query)
 
 
 def create_pet(

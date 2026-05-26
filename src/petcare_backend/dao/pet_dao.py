@@ -20,14 +20,32 @@ def _row_to_pet(row: dict[str, Any]) -> Pet:
     )
 
 
-def list_all(customer_id: int | None = None) -> list[Pet]:
-    sql = "SELECT id, customer_id, name, species, breed, age, gender, health_note FROM pet"
-    params: Sequence[Any] = ()
+def list_all(customer_id: int | None = None, query: str | None = None) -> list[Pet]:
+    q = (query or "").strip()
+    needs_join = bool(q)
+    if needs_join:
+        sql = (
+            "SELECT p.id, p.customer_id, p.name, p.species, p.breed, p.age, p.gender, p.health_note "
+            "FROM pet p LEFT JOIN customer c ON c.id = p.customer_id"
+        )
+    else:
+        sql = "SELECT id, customer_id, name, species, breed, age, gender, health_note FROM pet"
+    where: list[str] = []
+    params: list[Any] = []
     if customer_id is not None:
-        sql += " WHERE customer_id=%s"
-        params = (customer_id,)
-    sql += " ORDER BY id DESC"
-    return [_row_to_pet(r) for r in fetch_all(sql, params)]
+        col = "p.customer_id" if needs_join else "customer_id"
+        where.append(f"{col}=%s")
+        params.append(customer_id)
+    if q:
+        like = f"%{q}%"
+        where.append(
+            "(p.name LIKE %s OR p.species LIKE %s OR p.breed LIKE %s OR c.full_name LIKE %s)"
+        )
+        params.extend([like, like, like, like])
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY id DESC" if not needs_join else " ORDER BY p.id DESC"
+    return [_row_to_pet(r) for r in fetch_all(sql, tuple(params))]
 
 
 def get_by_id(pet_id: int) -> Pet | None:

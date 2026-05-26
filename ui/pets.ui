@@ -76,13 +76,33 @@ border-radius: 16px;
     </layout>
    </item>
    <item>
-    <widget class="QComboBox" name="customerFilterCombo">
+    <layout class="QHBoxLayout" name="filterLayout">
+     <property name="spacing">
+      <number>10</number>
+     </property>
      <item>
-      <property name="text">
-       <string>Tất cả khách hàng</string>
-      </property>
+      <widget class="QLineEdit" name="searchEdit">
+       <property name="placeholderText">
+        <string>Tìm theo tên, loài, giống hoặc chủ...</string>
+       </property>
+      </widget>
      </item>
-    </widget>
+     <item>
+      <widget class="QComboBox" name="customerFilterCombo">
+       <property name="minimumSize">
+        <size>
+         <width>200</width>
+         <height>0</height>
+        </size>
+       </property>
+       <item>
+        <property name="text">
+         <string>Tất cả khách hàng</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
     <widget class="QFrame" name="Card">
