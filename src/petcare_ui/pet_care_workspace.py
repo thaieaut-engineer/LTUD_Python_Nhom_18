@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTabWidget,
     QTableWidget,
@@ -150,8 +151,19 @@ class PetCareWorkspaceDialog(QDialog):
 
     def _build_overview_tab(self) -> None:
         tab = QWidget()
-        lay = QHBoxLayout(tab)
+        tab_root = QVBoxLayout(tab)
+        tab_root.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        scroll_contents = QWidget()
+        lay = QHBoxLayout(scroll_contents)
         lay.setSpacing(14)
+        lay.setContentsMargins(0, 0, 0, 0)
+        scroll.setWidget(scroll_contents)
+        tab_root.addWidget(scroll)
 
         # --- Thông tin thú ---
         info_box = QGroupBox("Thông tin thú cưng")
