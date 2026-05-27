@@ -354,11 +354,26 @@ class RetailCategoryLineChart(QWidget):
 
 
 def _vary_category_color(base: QColor, idx: int, n: int) -> QColor:
-    """Bien the sac do trong cung nhom (do an hoac phu kien)."""
+    """Tạo màu khác nhau theo thứ tự slice (cùng nhóm do an/phụ kiện).
+
+    Thay vì chỉ "làm nhạt" (có thể gần như cùng màu), ta dịch theo dải hue để phân biệt rõ hơn.
+    """
     if n <= 1:
         return QColor(base)
-    step = int(20 * idx / max(n - 1, 1))
-    return base.lighter(108 + step)
+
+    h, s, v, a = base.getHsv()
+    ratio = idx / max(n - 1, 1)  # 0..1
+
+    # DO_AN: dải hue hẹp hơn (cam -> vàng -> cam đậm); PHU_KIEN: dải hue rộng hơn (xanh -> cyan -> xanh đậm)
+    base_hex = base.name().lower()
+    orange_hex = QColor(THEME.stat_orange).name().lower()
+    hue_span = 34 if base_hex == orange_hex else 48
+
+    h2 = int(h - hue_span / 2 + ratio * hue_span) % 360
+    # Nhích độ bão hòa/độ sáng theo vị trí slice để tránh quá đồng nhất
+    s2 = int(min(255, max(90, s * (0.88 + 0.18 * (1 - abs(2 * ratio - 1))))))
+    v2 = int(min(255, max(70, v * (0.86 + 0.22 * ratio))))
+    return QColor.fromHsv(h2, s2, v2, a)
 
 
 def _colors_for_retail_rows(items: list[RetailProductRevenue]) -> list[QColor]:
