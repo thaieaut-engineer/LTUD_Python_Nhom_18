@@ -18,13 +18,15 @@ def create(
     note: str | None,
     customer_id: int | None = None,
     invoice_type: str = "SERVICE",
+    pet_stay_id: int | None = None,
 ) -> int:
     return execute(
-        "INSERT INTO invoice (appointment_id, customer_id, invoice_type, invoice_no, "
+        "INSERT INTO invoice (appointment_id, pet_stay_id, customer_id, invoice_type, invoice_no, "
         "subtotal_amount, discount_amount, tax_amount, total_amount, payment_status, created_by, note) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (
             appointment_id,
+            pet_stay_id,
             customer_id,
             invoice_type,
             invoice_no,
@@ -41,6 +43,10 @@ def create(
 
 def get_by_appointment(appointment_id: int) -> dict[str, Any] | None:
     return fetch_one("SELECT * FROM invoice WHERE appointment_id=%s", (appointment_id,))
+
+
+def get_by_pet_stay(pet_stay_id: int) -> dict[str, Any] | None:
+    return fetch_one("SELECT * FROM invoice WHERE pet_stay_id=%s", (pet_stay_id,))
 
 
 def list_appointment_ids_with_invoice() -> list[int]:

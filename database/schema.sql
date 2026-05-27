@@ -280,6 +280,80 @@ CREATE TABLE activity_log (
     INDEX idx_act_entity (entity, entity_id)
 ) ENGINE=InnoDB;
 
+-- ---------------------------------------------------------------------
+-- 13. pet_stay (luu tru / cham soc theo ngay)
+-- ---------------------------------------------------------------------
+CREATE TABLE pet_stay (
+    id                      INT             AUTO_INCREMENT PRIMARY KEY,
+    pet_id                  INT             NOT NULL,
+    customer_id             INT             NOT NULL,
+    employee_id             INT             NULL,
+    check_in_at             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expected_check_out_at   DATETIME        NULL,
+    actual_check_out_at     DATETIME        NULL,
+    status                  ENUM('DANG_CHAM_SOC','KHACH_DA_NHAN','HUY')
+                                            NOT NULL DEFAULT 'DANG_CHAM_SOC',
+    daily_rate              DECIMAL(12,2)   NOT NULL DEFAULT 0 CHECK (daily_rate >= 0),
+    note                    TEXT            NULL,
+    created_at              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                            ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_stay_pet
+        FOREIGN KEY (pet_id) REFERENCES pet(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_stay_customer
+        FOREIGN KEY (customer_id) REFERENCES customer(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_stay_employee
+        FOREIGN KEY (employee_id) REFERENCES user(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    INDEX idx_stay_pet (pet_id),
+    INDEX idx_stay_status (status)
+) ENGINE=InnoDB;
+
+CREATE TABLE pet_care_log (
+    id              BIGINT          AUTO_INCREMENT PRIMARY KEY,
+    stay_id         INT             NOT NULL,
+    employee_id     INT             NULL,
+    log_type        ENUM('FEEDING','CARE','STATUS') NOT NULL DEFAULT 'CARE',
+    content         TEXT            NOT NULL,
+    product_id      INT             NULL,
+    service_id      INT             NULL,
+    quantity        INT             NULL DEFAULT 1,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_log_stay
+        FOREIGN KEY (stay_id) REFERENCES pet_stay(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_log_product
+        FOREIGN KEY (product_id) REFERENCES product(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_log_service
+        FOREIGN KEY (service_id) REFERENCES service(id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    INDEX idx_log_stay (stay_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE pet_care_media (
+    id              BIGINT          AUTO_INCREMENT PRIMARY KEY,
+    stay_id         INT             NOT NULL,
+    care_log_id     BIGINT          NULL,
+    media_type      ENUM('IMAGE','VIDEO') NOT NULL,
+    file_path       VARCHAR(500)    NOT NULL,
+    caption         VARCHAR(255)    NULL,
+    created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_media_stay
+        FOREIGN KEY (stay_id) REFERENCES pet_stay(id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    INDEX idx_media_stay (stay_id)
+) ENGINE=InnoDB;
+
+ALTER TABLE invoice
+    ADD COLUMN pet_stay_id INT NULL AFTER appointment_id,
+    ADD UNIQUE KEY uk_invoice_pet_stay (pet_stay_id),
+    ADD CONSTRAINT fk_inv_pet_stay
+        FOREIGN KEY (pet_stay_id) REFERENCES pet_stay(id)
+        ON UPDATE CASCADE ON DELETE RESTRICT;
+
 -- =====================================================================
 -- VIEWS tien loi cho bao cao
 -- =====================================================================

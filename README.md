@@ -34,6 +34,12 @@ Xây dựng phần mềm giúp:
 2.2 Quản lý thú cưng
 - Mỗi khách hàng có thể có nhiều thú cưng
 - Thêm / sửa / xóa thú cưng
+- Tìm kiếm theo tên, loài, giống, chủ
+- **Nhấn vào thú cưng** → giao diện chăm sóc (lưu trú theo ngày):
+    + Nhận thú / gán nhân viên chăm sóc
+    + Ghi nhận cho ăn, tải ảnh/video tình trạng
+    + Trạng thái khách đã nhận thú
+    + Lịch sử chăm sóc, hóa đơn lưu trú
 - Thông tin:
     + Tên thú cưng
     + Loài (chó, mèo,…)

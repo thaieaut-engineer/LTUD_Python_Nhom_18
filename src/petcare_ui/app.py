@@ -37,8 +37,9 @@ from PyQt6.QtWidgets import (
 
 from .theme import THEME, background_image_path, qss
 from .pages.dashboard import DashboardView
+from .pet_care_workspace import PetCareWorkspaceDialog
 from src.petcare_backend.services import auth_service
-from src.petcare_backend.services import customer_service, pet_service, service_service
+from src.petcare_backend.services import customer_service, pet_service, pet_boarding_service, service_service
 from src.petcare_backend.services import user_service
 from src.petcare_backend.services import appointment_service
 from src.petcare_backend.services import invoice_service, payment_service
@@ -724,6 +725,7 @@ class PetCareApp(QMainWindow):
                 ph.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)
                 ptable.setColumnWidth(6, 230)
                 ptable.cellDoubleClicked.connect(self._on_pet_image_double_clicked)
+                ptable.cellClicked.connect(self._on_pet_table_cell_clicked)
             if hasattr(pets_page, "searchEdit"):
                 pets_page.searchEdit.textChanged.connect(
                     lambda text: self._reload_pets(text)
@@ -1394,6 +1396,10 @@ class PetCareApp(QMainWindow):
         root.addWidget(summary)
 
         def _refresh() -> None:
+            try:
+                invoice_service.sync_invoice_totals(invoice_id)
+            except invoice_service.InvoiceError:
+                pass
             items = invoice_item_dao.list_by_invoice(invoice_id)
             table.setRowCount(len(items))
             for r, it in enumerate(items):
@@ -1605,19 +1611,17 @@ class PetCareApp(QMainWindow):
             on_done()
 
     def _show_payment_dialog(self, invoice_id: int) -> None:
-        from decimal import Decimal
+        from src.petcare_backend.dao import invoice_dao
 
-        from src.petcare_backend.dao import invoice_dao, payment_dao
-
-        inv = invoice_dao.get_by_id(invoice_id)
-        if inv is None:
-            QMessageBox.warning(self, "Thanh toán", "Hóa đơn không tồn tại.")
+        try:
+            amounts = invoice_service.get_payment_amounts(invoice_id)
+        except invoice_service.InvoiceError as exc:
+            QMessageBox.warning(self, "Thanh toán", str(exc))
             return
-        total_amt = Decimal(str(inv.get("total_amount") or 0))
-        paid_amt = Decimal(str(payment_dao.sum_paid(invoice_id)))
-        default_pay = total_amt - paid_amt
-        if default_pay < 0:
-            default_pay = Decimal(0)
+
+        total_amt = amounts["total"]
+        paid_amt = amounts["paid"]
+        default_pay = amounts["remaining"]
         default_int = int(default_pay)
         default_txt = f"{default_int:,}".replace(",", ".")
 
@@ -1629,15 +1633,33 @@ class PetCareApp(QMainWindow):
             )
             return
 
+        inv_no = amounts.get("invoice_no") or str(invoice_id)
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Thanh toán hoá đơn #{invoice_id}")
+        dlg.setWindowTitle(f"Thanh toán — {inv_no}")
         dlg.setMinimumWidth(520)
         self._install_pet_background(dlg, overlay_color=(239, 246, 255, 170))
 
         root = QVBoxLayout(dlg)
+
+        def _vnd(d: object) -> str:
+            return f"{int(d):,}đ".replace(",", ".")
+
+        summary = QLabel(
+            f"Tổng hóa đơn: {_vnd(total_amt)}\n"
+            f"Đã thanh toán: {_vnd(paid_amt)}\n"
+            f"Còn phải trả: {_vnd(default_pay)}"
+        )
+        summary.setWordWrap(True)
+        summary.setStyleSheet(
+            "background:#F0FDF4; border:1px solid #86EFAC; border-radius:10px; "
+            "padding:10px 12px; font-size:10pt; color:#14532D;"
+        )
+        root.addWidget(summary)
+
         form = QFormLayout()
         amount = QLineEdit()
         amount.setText(default_txt)
+        amount.setPlaceholderText("VD: 240000 hoặc 240.000")
         method = QComboBox()
         method.addItem("Tiền mặt")
         method.addItem("Chuyển khoản")
@@ -4074,8 +4096,15 @@ class PetCareApp(QMainWindow):
             hi.addWidget(img_btn)
             table.setCellWidget(r, 0, wrap_img)
 
-            name_item = QTableWidgetItem(p.name)
+            display_name = p.name
+            try:
+                if pet_boarding_service.get_active_stay(p.id):
+                    display_name = f"🟢 {p.name}"
+            except Exception:
+                pass
+            name_item = QTableWidgetItem(display_name)
             name_item.setData(Qt.ItemDataRole.UserRole, p.id)
+            name_item.setToolTip("Nhấn để mở giao diện chăm sóc chi tiết")
             table.setItem(r, 1, name_item)
             table.setItem(r, 2, QTableWidgetItem(p.species))
             table.setItem(r, 3, QTableWidgetItem(p.breed or "—"))
@@ -4412,6 +4441,54 @@ class PetCareApp(QMainWindow):
             QMessageBox.warning(self, "Ẩn dịch vụ", str(exc))
             return
         self._reload_services()
+
+    def _on_pet_table_cell_clicked(self, row: int, col: int) -> None:
+        if col in (0, 6):
+            return
+        pets_page = self._pages.get("pets")
+        if not pets_page or not hasattr(pets_page, "petsTable"):
+            return
+        table: QTableWidget = pets_page.petsTable
+        if table.columnCount() > 0 and table.rowSpan(row, 0) > 1:
+            return
+        name_item = table.item(row, 1)
+        if name_item is None:
+            return
+        pet_id = name_item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(pet_id, int):
+            self._open_pet_care_workspace(pet_id)
+
+    def _open_pet_care_workspace(self, pet_id: int) -> None:
+        pet = next((p for p in self._pets if p.id == pet_id), None)
+        if pet is None:
+            from src.petcare_backend.dao import pet_dao
+
+            row = pet_dao.get_by_id(pet_id)
+            if row is None:
+                return
+            pet = Pet(
+                id=row["id"],
+                customer_id=row["customer_id"],
+                name=row["name"],
+                species=row["species"],
+                breed=row.get("breed"),
+                age=row.get("age"),
+                gender=row.get("gender"),
+                health_note=row.get("health_note"),
+            )
+        if not getattr(self, "_employees_list", None):
+            self._reload_employees()
+        lookup = {c.id: c.full_name for c in self._customers}
+        dlg = PetCareWorkspaceDialog(
+            self,
+            pet,
+            employees=list(getattr(self, "_employees_list", []) or []),
+            customers_lookup=lookup,
+            install_bg=self._install_pet_background,
+        )
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            pass
+        self._reload_pets()
 
     def _on_edit_pet_clicked(self, pet_id: int) -> None:
         pet = next((p for p in self._pets if p.id == pet_id), None)

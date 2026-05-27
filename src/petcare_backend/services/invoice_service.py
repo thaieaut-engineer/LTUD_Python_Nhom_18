@@ -284,6 +284,32 @@ def recalc_totals(invoice_id: int, discount_amount: Decimal, tax_amount: Decimal
     invoice_dao.update_totals(invoice_id, float(subtotal), float(discount), float(tax), float(total))
 
 
+def sync_invoice_totals(invoice_id: int) -> Decimal:
+    """Cập nhật tổng HĐ theo các dòng chi tiết (trước khi thanh toán / hiển thị)."""
+    return _recalc_totals_from_items(invoice_id)
+
+
+def get_payment_amounts(invoice_id: int) -> dict:
+    """Tổng HĐ, đã trả, còn phải trả — sau khi đồng bộ từ invoice_item."""
+    from ..dao import payment_dao
+
+    sync_invoice_totals(invoice_id)
+    inv = invoice_dao.get_by_id(invoice_id)
+    if inv is None:
+        raise InvoiceError("Hóa đơn không tồn tại.")
+    total = Decimal(str(inv.get("total_amount") or 0))
+    paid = Decimal(str(payment_dao.sum_paid(invoice_id)))
+    remaining = total - paid
+    if remaining < 0:
+        remaining = Decimal(0)
+    return {
+        "invoice_no": str(inv.get("invoice_no") or ""),
+        "total": total,
+        "paid": paid,
+        "remaining": remaining,
+    }
+
+
 def list_recent(
     limit: int = 100,
     *,
