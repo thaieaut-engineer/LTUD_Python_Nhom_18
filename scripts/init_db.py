@@ -107,9 +107,14 @@ def reset_default_passwords() -> None:
             "UPDATE user SET password_hash=%s WHERE username=%s",
             (hash_password("admin123"), "admin"),
         )
+        demo_pw = hash_password("123456")
         cur.execute(
             "UPDATE user SET password_hash=%s WHERE username=%s",
-            (hash_password("123456"), "nv01"),
+            (demo_pw, "nv01"),
+        )
+        cur.execute(
+            "UPDATE user SET password_hash=%s WHERE username LIKE 'demo_%%'",
+            (demo_pw,),
         )
         cur.close()
     finally:
@@ -124,6 +129,11 @@ def main() -> int:
         "--reset-pw",
         action="store_true",
         help="Sau khi seed, bam lai mat khau admin / nv01 bang bcrypt",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Sau khi seed, nap them du lieu mau (dashboard, Nutt, ban le)",
     )
     args = parser.parse_args()
 
@@ -143,6 +153,21 @@ def main() -> int:
     if args.reset_pw or run_seed:
         print("[+]   Reset password (bcrypt) cho admin / nv01")
         reset_default_passwords()
+        print("     -> OK")
+
+    if args.demo and run_seed:
+        print("[+]   Nap du lieu mau (seed_demo_data.py)")
+        import subprocess
+
+        demo_script = ROOT / "scripts" / "seed_demo_data.py"
+        proc = subprocess.run(
+            [sys.executable, str(demo_script), "--reset"],
+            cwd=str(ROOT),
+            check=False,
+        )
+        if proc.returncode != 0:
+            print("     -> LOI khi nap du lieu mau")
+            return proc.returncode
         print("     -> OK")
 
     print("\nHoan tat. Tai khoan mac dinh:")

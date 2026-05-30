@@ -130,7 +130,13 @@ Xây dựng phần mềm giúp:
 Lần đầu chạy:
 ```
 python scripts/init_db.py            # tạo schema + seed (đã có sẵn product, invoice mở rộng)
+python scripts/init_db.py --demo     # seed + thêm dữ liệu mẫu (dashboard, Nutt, bán lẻ)
+python scripts/seed_demo_data.py     # chỉ nạp dữ liệu mẫu (DB đã có sẵn)
+python scripts/seed_demo_data.py --reset   # xóa DEMO cũ và nạp lại
+python scripts/seed_demo_data.py --catalog-only   # chỉ thêm NV + sản phẩm mẫu
 ```
+
+Dữ liệu mẫu bổ sung: **9 nhân viên** (`demo_nv02` … `demo_nv10`, mật khẩu `123456`) và **20 sản phẩm** (SKU `DEMO-FOOD-*`, `DEMO-ACC-*`).
 
 Nếu bạn đang dùng database cũ (đã chạy `init_db.py` trước khi có tính năng mới), hãy chạy migration để cập nhật:
 ```

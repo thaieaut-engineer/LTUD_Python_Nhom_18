@@ -18,8 +18,15 @@ INSERT INTO role (id, name, description) VALUES
 -- LUU Y: password_hash ben duoi la bcrypt cua 'admin123' va '123456'
 -- (cost=12). Ban co the re-generate bang script seed_users.py.
 INSERT INTO user (role_id, username, password_hash, full_name, phone, is_active) VALUES
-    (1, 'admin', '$2b$12$u1m5T7vH4M3xTqj3O2J1eOYxC2ZkQmV.QoA1h1o0yGk2cM2o2eXfW', 'Quan tri vien', '0900000000', 1),
-    (2, 'nv01',  '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Nhan vien 01', '0911111111', 1);
+    (1, 'admin', '$2b$12$u1m5T7vH4M3xTqj3O2J1eOYxC2ZkQmV.QoA1h1o0yGk2cM2o2eXfW', 'Quản trị viên', '0900000000', 1),
+    (2, 'nv01',  '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Nguyễn Văn A', '0911111111', 1),
+    (2, 'demo_nv02', '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Trần Thị Mai', '0922222202', 1),
+    (2, 'demo_nv03', '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Lê Văn Bình', '0922222203', 1),
+    (2, 'demo_nv04', '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Phạm Thu Hà', '0922222204', 1),
+    (2, 'demo_nv05', '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Hoàng Minh Tuấn', '0922222205', 1),
+    (2, 'demo_nv06', '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Võ Thị Lan', '0922222206', 1),
+    (2, 'demo_nv07', '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Đặng Quốc Huy', '0922222207', 1),
+    (2, 'demo_nv08', '$2b$12$QyLXx0b/2Q6p0W3G8j9cAO5f8wQkXeG7k6u9bJ4t7Y.s4b8aZhG5K', 'Bùi Ngọc Anh', '0922222208', 1);
 
 -- ---------- service ----------
 INSERT INTO service (name, price, description, duration_min, is_active) VALUES
@@ -100,7 +107,15 @@ INSERT INTO product (name, category, sku, price, stock, description, is_active) 
     (N'Dây dắt nylon 1.5m',        'PHU_KIEN', 'LS-NY-150',   60000,  40,  N'Dây dắt nylon dài 1.5m',           1),
     (N'Lồng vận chuyển size M',    'PHU_KIEN', 'CG-M',        450000, 8,   N'Lồng nhựa di chuyển thú cưng',     1),
     (N'Bát ăn inox đôi',           'PHU_KIEN', 'BW-IN-2',     95000,  50,  N'Bát ăn inox kèm đế cao su',        1),
-    (N'Sữa tắm bưởi Bio 250ml',    'PHU_KIEN', 'SH-BIO-250',  130000, 35,  N'Sữa tắm hương bưởi cho thú cưng',  1);
+    (N'Sữa tắm bưởi Bio 250ml',    'PHU_KIEN', 'SH-BIO-250',  130000, 35,  N'Sữa tắm hương bưởi cho thú cưng',  1),
+    (N'Hạt SmartHeart Puppy 1kg',  'DO_AN',    'DEMO-FOOD-001', 185000, 45, N'Hạt cho chó con dưới 12 tháng', 1),
+    (N'Hạt Catrice Adult 500g',    'DO_AN',    'DEMO-FOOD-002', 95000,  60, N'Hạt cho mèo trưởng thành', 1),
+    (N'Pate Cesar vị bò 100g',     'DO_AN',    'DEMO-FOOD-003', 22000,  150,N'Pate cho chó nhỏ', 1),
+    (N'Hạt Me-O cá ngừ 1.2kg',     'DO_AN',    'DEMO-FOOD-006', 125000, 55, N'Hạt cho mèo vị cá ngừ', 1),
+    (N'Nệm ngủ size L',            'PHU_KIEN', 'DEMO-ACC-001',  280000, 15, N'Nệm êm chống trượt', 1),
+    (N'Khay vệ sinh mèo có nắp',   'PHU_KIEN', 'DEMO-ACC-002',  165000, 20, N'Khay vệ sinh kèm xẻng', 1),
+    (N'Đồ chơi chuột catnip',      'PHU_KIEN', 'DEMO-ACC-003',  35000,  80, N'Đồ chơi kích thích mèo', 1),
+    (N'Chuồng sắt size L',         'PHU_KIEN', 'DEMO-ACC-006',  520000, 6,  N'Chuồng sắt có khay hứng', 1);
 
 -- Hoa don ban le (sau khi da co bang product)
 INSERT INTO invoice (
