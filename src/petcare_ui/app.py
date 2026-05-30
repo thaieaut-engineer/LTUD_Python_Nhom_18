@@ -53,6 +53,10 @@ APPOINTMENT_STATUSES = ("Chờ xử lý", "Đang thực hiện", "Hoàn thành",
 APPOINTMENT_ACTIVE_STATUSES = ("Chờ xử lý", "Đang thực hiện")
 APPOINTMENT_HISTORY_STATUSES = ("Hoàn thành", "Hủy")
 
+# Lưới sản phẩm (Đồ ăn & Phụ kiện): số cột cố định mỗi hàng
+PRODUCTS_GRID_COLS = 4
+PRODUCTS_GRID_CELL_MIN = 200
+
 _APPT_TAB_BTN_QSS = f"""
 QPushButton {{
   background: rgba(255,255,255,0.85);
@@ -3615,7 +3619,7 @@ class PetCareApp(QMainWindow):
         self._render_products_table()
 
     def _sync_products_grid_metrics(self) -> None:
-        """O luoi san pham: 6 cot bang nhau (theo viewport), hang co chieu cao da set san."""
+        """Ô lưới sản phẩm: 4 cột bằng nhau (theo viewport), hàng có chiều cao đã set sẵn."""
         products_page = self._pages.get("products")
         if not products_page or not self._products_list:
             return
@@ -3624,8 +3628,8 @@ class PetCareApp(QMainWindow):
         sa: QScrollArea | None = getattr(products_page, "productsScrollArea", None)
         if grid is None or container is None:
             return
-        cols = 6
-        cell_floor = 170
+        cols = PRODUCTS_GRID_COLS
+        cell_floor = PRODUCTS_GRID_CELL_MIN
         sp = grid.horizontalSpacing()
         mg = grid.contentsMargins()
         base_min = cols * cell_floor + max(0, cols - 1) * sp + mg.left() + mg.right()
@@ -3655,13 +3659,13 @@ class PetCareApp(QMainWindow):
             empty = QLabel("Chưa có sản phẩm nào (hoặc không khớp bộ lọc).")
             empty.setStyleSheet("color:#64748B; font:700 10pt 'Segoe UI'; padding: 28px;")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            grid.addWidget(empty, 0, 0, 1, 6)
+            grid.addWidget(empty, 0, 0, 1, PRODUCTS_GRID_COLS)
             if hasattr(products_page, "productsGridContainer"):
                 products_page.productsGridContainer.setMinimumWidth(0)
             return
 
-        cols = 6
-        cell_min = 170
+        cols = PRODUCTS_GRID_COLS
+        cell_min = PRODUCTS_GRID_CELL_MIN
         for c in range(cols):
             grid.setColumnStretch(c, 1)
 
