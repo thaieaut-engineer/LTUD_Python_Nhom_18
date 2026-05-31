@@ -45,6 +45,7 @@ class Pet:
     age: int | None = None
     gender: str | None = None
     health_note: str | None = None
+    image_path: str | None = None
 
 
 @dataclass
@@ -66,6 +67,7 @@ class Product:
     stock: int = 0
     sku: str | None = None
     description: str | None = None
+    image_path: str | None = None
     is_active: bool = True
 
 

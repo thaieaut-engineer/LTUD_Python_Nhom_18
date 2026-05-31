@@ -5,6 +5,7 @@ from mysql.connector import Error as MySQLError
 
 from ..dao import pet_dao
 from ..activity_log import log_admin
+from ..media_storage import MediaStorageError, copy_catalog_image, remove_stored_file
 
 
 class PetError(Exception):
@@ -93,8 +94,34 @@ def update_pet(
 
 def delete_pet(pet_id: int) -> None:
     try:
+        pet = pet_dao.get_by_id(pet_id)
         pet_dao.delete(pet_id)
+        if pet is not None:
+            remove_stored_file(pet.image_path)
         log_admin("DELETE_PET", entity="pet", entity_id=int(pet_id), message="Xoá thú cưng")
     except MySQLError as exc:
         raise PetError("Không thể xoá thú cưng vì đã phát sinh lịch hẹn.") from exc
+
+
+def set_pet_image(pet_id: int, source_path: str) -> None:
+    pet = pet_dao.get_by_id(pet_id)
+    if pet is None:
+        raise PetError("Thú cưng không tồn tại.")
+    try:
+        stored = copy_catalog_image("pets", pet_id, source_path)
+    except MediaStorageError as exc:
+        raise PetError(str(exc)) from exc
+    old_path = pet.image_path
+    try:
+        pet_dao.update_image_path(pet_id, stored)
+        remove_stored_file(old_path)
+        log_admin(
+            "UPDATE_PET_IMAGE",
+            entity="pet",
+            entity_id=int(pet_id),
+            message=f"Cập nhật ảnh thú cưng '{pet.name}'",
+        )
+    except MySQLError as exc:
+        remove_stored_file(stored)
+        raise PetError("Không thể lưu ảnh thú cưng.") from exc
 

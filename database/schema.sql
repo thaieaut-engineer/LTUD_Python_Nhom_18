@@ -67,6 +67,7 @@ CREATE TABLE pet (
     age             INT             NULL,
     gender          VARCHAR(10)     NULL COMMENT 'Duc | Cai',
     health_note     TEXT            NULL,
+    image_path      VARCHAR(512)    NULL COMMENT 'Duong dan anh da luu tren dia',
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
                                     ON UPDATE CURRENT_TIMESTAMP,
@@ -159,6 +160,7 @@ CREATE TABLE product (
     price           DECIMAL(12,2)   NOT NULL DEFAULT 0 CHECK (price >= 0),
     stock           INT             NOT NULL DEFAULT 0 CHECK (stock >= 0),
     description     TEXT            NULL,
+    image_path      VARCHAR(512)    NULL COMMENT 'Duong dan anh da luu tren dia',
     is_active       TINYINT(1)      NOT NULL DEFAULT 1,
     created_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP

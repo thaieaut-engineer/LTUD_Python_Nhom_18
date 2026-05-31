@@ -40,6 +40,8 @@ from .pages.dashboard import DashboardView
 from .pet_care_workspace import PetCareWorkspaceDialog
 from src.petcare_backend.services import auth_service
 from src.petcare_backend.services import customer_service, pet_service, pet_boarding_service, service_service
+from src.petcare_backend.services.pet_service import PetError
+from src.petcare_backend.services.product_service import ProductError
 from src.petcare_backend.services import user_service
 from src.petcare_backend.services import appointment_service
 from src.petcare_backend.services import invoice_service, payment_service
@@ -480,8 +482,6 @@ class PetCareApp(QMainWindow):
         self._pages: dict[str, QWidget] = {}
         # demo list cu - da thay bang DB rows (_appointments_rows)
         self._demo_appointments: list[dict[str, str | list[str]]] = []
-        self._pet_images: dict[tuple[int, int], str] = {}
-        self._product_images: dict[int, str] = {}
         self._customers: list[Customer] = []
         self._pets: list[Pet] = []
         self._pets_thumb: int = 56
@@ -3695,7 +3695,7 @@ class PetCareApp(QMainWindow):
                 "QPushButton{background:#E8EEEB; border:1px dashed #94A3B8; border-radius:10px; font-size:30px;}"
                 "QPushButton:hover{background:#D1E8DF; border-color:" + THEME.primary + ";}"
             )
-            img_btn.setToolTip("Chọn ảnh (lưu tạm trong phiên)")
+            img_btn.setToolTip("Chọn ảnh sản phẩm")
             img_btn.setIcon(self._product_thumb_icon(p.id, p.category, thumb - 6))
             img_btn.setIconSize(QSize(thumb - 6, thumb - 6))
             img_btn.setText("")
@@ -3826,19 +3826,22 @@ class PetCareApp(QMainWindow):
         product_id: int | None,
         category: str,
         size: int = 48,
+        image_path: str | None = None,
     ) -> QPixmap:
         px = max(24, int(size))
-        if product_id is not None:
-            path = self._product_images.get(int(product_id))
-            if path and os.path.exists(path):
-                raw = QPixmap(path)
-                if not raw.isNull():
-                    return raw.scaled(
-                        px,
-                        px,
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
+        path = image_path
+        if path is None and product_id is not None:
+            prod = next((x for x in self._products_list if x.id == int(product_id)), None)
+            path = prod.image_path if prod else None
+        if path and os.path.exists(path):
+            raw = QPixmap(path)
+            if not raw.isNull():
+                return raw.scaled(
+                    px,
+                    px,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
         pix = QPixmap(px, px)
         pix.fill(QColor(self._product_category_bg(category)))
         painter = QPainter(pix)
@@ -3857,8 +3860,11 @@ class PetCareApp(QMainWindow):
         product_id: int | None,
         category: str,
         size: int = 48,
+        image_path: str | None = None,
     ) -> QIcon:
-        return QIcon(self._product_thumb_pixmap(product_id, category, size))
+        return QIcon(
+            self._product_thumb_pixmap(product_id, category, size, image_path=image_path)
+        )
 
     def _on_product_image_pick(self, product_id: int) -> None:
         if next((x for x in self._products_list if x.id == product_id), None) is None:
@@ -3871,8 +3877,12 @@ class PetCareApp(QMainWindow):
         )
         if not path:
             return
-        self._product_images[product_id] = path
-        self._render_products_table()
+        try:
+            product_service.set_product_image(product_id, path)
+        except ProductError as exc:
+            QMessageBox.warning(self, "Ảnh sản phẩm", str(exc))
+            return
+        self._reload_products()
 
     def _on_add_product_clicked(self) -> None:
         self._show_product_dialog(None)
@@ -4088,7 +4098,7 @@ class PetCareApp(QMainWindow):
                 "QPushButton:hover{background:#CBD5E1;}"
             )
             img_btn.setToolTip("Chọn ảnh (hoặc double-click ô ảnh trên bảng)")
-            img_path = self._pet_images.get((p.customer_id, p.id))
+            img_path = p.image_path
             if img_path and os.path.exists(img_path):
                 pix = QPixmap(img_path)
                 if not pix.isNull():
@@ -4148,8 +4158,12 @@ class PetCareApp(QMainWindow):
         )
         if not path:
             return
-        self._pet_images[(pet.customer_id, pet.id)] = path
-        self._render_pets_table()
+        try:
+            pet_service.set_pet_image(pet.id, path)
+        except PetError as exc:
+            QMessageBox.warning(self, "Ảnh thú cưng", str(exc))
+            return
+        self._reload_pets()
 
     def _refresh_pets_customer_filter(self) -> None:
         pets_page = self._pages.get("pets")
@@ -4204,8 +4218,12 @@ class PetCareApp(QMainWindow):
         )
         if not path:
             return
-        self._pet_images[(pet.customer_id, pet.id)] = path
-        self._render_pets_table()
+        try:
+            pet_service.set_pet_image(pet.id, path)
+        except PetError as exc:
+            QMessageBox.warning(self, "Ảnh thú cưng", str(exc))
+            return
+        self._reload_pets()
 
     def _make_row_actions(
         self,
@@ -4720,8 +4738,6 @@ class PetCareApp(QMainWindow):
         self._products_list = []
         self._employees_list = []
         self._employees_stats: list = []
-        self._pet_images.clear()
-        self._product_images.clear()
 
         emp_page = self._pages.get("employees")
         if emp_page and hasattr(emp_page, "employeesTable"):

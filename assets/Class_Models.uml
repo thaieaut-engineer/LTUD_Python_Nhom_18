@@ -1,0 +1,98 @@
+@startuml PetCare_Class_Models
+' =====================================================================
+' Class Diagram - Domain Models & Value Objects
+' =====================================================================
+
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+package "Domain Models  (petcare_backend.models)" {
+
+  class User <<dataclass>> {
+    +id, role_id, role_name
+    +username, full_name, phone
+    +is_active: bool
+    --
+    +is_admin / is_employee
+  }
+
+  class Customer <<dataclass>> {
+    +id, full_name, phone
+    +address, email
+    +created_at
+  }
+
+  class Pet <<dataclass>> {
+    +id, customer_id, name
+    +species, breed, age
+    +gender, health_note
+  }
+
+  class Service <<dataclass>> {
+    +id, name, price
+    +description, duration_min
+    +is_active
+  }
+
+  class Product <<dataclass>> {
+    +id, name, category
+    +price, stock, sku
+    +description, is_active
+  }
+
+  class Appointment <<dataclass>> {
+    +id, customer_id, pet_id
+    +employee_id, scheduled_at
+    +status, note
+  }
+
+  class Invoice <<dataclass>> {
+    +id, appointment_id
+    +invoice_no, issued_at
+    +subtotal, discount, tax, total
+    +payment_status, note
+  }
+
+  Customer "1" o-- "0..*" Pet
+  Customer "1" o-- "0..*" Appointment
+  Pet "1" o-- "0..*" Appointment
+  User "1" o-- "0..*" Appointment : NV phụ trách
+  Appointment "1" o-- "0..1" Invoice
+}
+
+package "Report Value Objects  (report_service)" {
+
+  class DailyRevenue <<dataclass>> {
+    +revenue_date, invoice_count
+    +total_revenue
+  }
+
+  class RevenueSummary <<dataclass>> {
+    +start, end, invoice_count
+    +total_revenue, avg_invoice
+  }
+
+  class DashboardOverview <<dataclass>> {
+    +revenue_today / this_month
+    +pending_appointments
+    +unpaid_invoices
+  }
+
+  class EmployeePerformance <<dataclass>> {
+    +employee_id, full_name
+    +appointment_count, done
+    +service_revenue, retail_revenue
+    +total_revenue
+  }
+
+  class EmployeePerformanceReport <<dataclass>> {
+    +start, end
+    +employees[], total_revenue
+  }
+
+  EmployeePerformanceReport *-- EmployeePerformance
+  DashboardOverview ..> RevenueSummary
+}
+
+@enduml

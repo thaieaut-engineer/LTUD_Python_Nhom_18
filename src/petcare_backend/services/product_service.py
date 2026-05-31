@@ -7,6 +7,7 @@ from mysql.connector import Error as MySQLError
 
 from ..activity_log import log_admin
 from ..dao import product_dao
+from ..media_storage import MediaStorageError, copy_catalog_image, remove_stored_file
 
 
 class ProductError(Exception):
@@ -178,3 +179,26 @@ def restore_stock(product_id: int, qty: int) -> None:
     if qty <= 0:
         return
     product_dao.adjust_stock(product_id, int(qty))
+
+
+def set_product_image(product_id: int, source_path: str) -> None:
+    product = product_dao.get_by_id(product_id)
+    if product is None:
+        raise ProductError("Sản phẩm không tồn tại.")
+    try:
+        stored = copy_catalog_image("products", product_id, source_path)
+    except MediaStorageError as exc:
+        raise ProductError(str(exc)) from exc
+    old_path = product.image_path
+    try:
+        product_dao.update_image_path(product_id, stored)
+        remove_stored_file(old_path)
+        log_admin(
+            "UPDATE_PRODUCT_IMAGE",
+            entity="product",
+            entity_id=int(product_id),
+            message=f"Cập nhật ảnh sản phẩm '{product.name}'",
+        )
+    except MySQLError as exc:
+        remove_stored_file(stored)
+        raise ProductError("Không thể lưu ảnh sản phẩm.") from exc

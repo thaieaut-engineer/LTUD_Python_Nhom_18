@@ -19,6 +19,7 @@ Thumbs.db
 
 # Pet care media uploads
 data/pet_care_media/
+data/catalog_images/
 
 # Build / packaging
 build/

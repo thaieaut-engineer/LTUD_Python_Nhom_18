@@ -17,6 +17,7 @@ def _row_to_pet(row: dict[str, Any]) -> Pet:
         age=row.get("age"),
         gender=row.get("gender"),
         health_note=row.get("health_note"),
+        image_path=row.get("image_path"),
     )
 
 
@@ -25,11 +26,15 @@ def list_all(customer_id: int | None = None, query: str | None = None) -> list[P
     needs_join = bool(q)
     if needs_join:
         sql = (
-            "SELECT p.id, p.customer_id, p.name, p.species, p.breed, p.age, p.gender, p.health_note "
+            "SELECT p.id, p.customer_id, p.name, p.species, p.breed, p.age, p.gender, "
+            "p.health_note, p.image_path "
             "FROM pet p LEFT JOIN customer c ON c.id = p.customer_id"
         )
     else:
-        sql = "SELECT id, customer_id, name, species, breed, age, gender, health_note FROM pet"
+        sql = (
+            "SELECT id, customer_id, name, species, breed, age, gender, health_note, image_path "
+            "FROM pet"
+        )
     where: list[str] = []
     params: list[Any] = []
     if customer_id is not None:
@@ -50,7 +55,8 @@ def list_all(customer_id: int | None = None, query: str | None = None) -> list[P
 
 def get_by_id(pet_id: int) -> Pet | None:
     row = fetch_one(
-        "SELECT id, customer_id, name, species, breed, age, gender, health_note FROM pet WHERE id=%s",
+        "SELECT id, customer_id, name, species, breed, age, gender, health_note, image_path "
+        "FROM pet WHERE id=%s",
         (pet_id,),
     )
     return _row_to_pet(row) if row else None
@@ -91,4 +97,8 @@ def update(
 
 def delete(pet_id: int) -> None:
     execute("DELETE FROM pet WHERE id=%s", (pet_id,))
+
+
+def update_image_path(pet_id: int, image_path: str | None) -> None:
+    execute("UPDATE pet SET image_path=%s WHERE id=%s", (image_path, pet_id))
 

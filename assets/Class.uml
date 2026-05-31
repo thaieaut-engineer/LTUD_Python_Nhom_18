@@ -1,0 +1,134 @@
+@startuml PetCare_Class_Overview
+' =====================================================================
+' Class Diagram - TỔNG QUAN kiến trúc (render browser ≤ 4096px)
+' Chi tiết: Class_Models.uml | Class_Backend.uml | Class_UI.uml
+' =====================================================================
+
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 30
+skinparam ranksep 40
+skinparam linetype polyline
+
+' --- UI ---
+package "UI Layer  (petcare_ui)" as UI #E8F4FD {
+  class PetCareApp <<QMainWindow>>
+  class DashboardView <<QWidget>>
+  class PetCareWorkspaceDialog <<QDialog>>
+  class LoginPage <<QWidget>>
+  class Sidebar <<QWidget>>
+
+  PetCareApp *-- Sidebar
+  PetCareApp *-- DashboardView
+  PetCareApp ..> LoginPage
+  PetCareApp ..> PetCareWorkspaceDialog
+}
+
+' --- Service ---
+package "Service Layer  (petcare_backend.services)" as SVC #FFF8E8 {
+  together {
+    class AuthService <<service>>
+    class CustomerService <<service>>
+    class PetService <<service>>
+    class ServiceCatalogService <<service>>
+    class ProductService <<service>>
+    class UserService <<service>>
+  }
+  together {
+    class AppointmentService <<service>>
+    class InvoiceService <<service>>
+    class PaymentService <<service>>
+    class PetBoardingService <<service>>
+    class ReportService <<service>>
+  }
+}
+
+' --- DAO ---
+package "DAO Layer  (petcare_backend.dao)" as DAO #F0FFF0 {
+  together {
+    class UserDAO <<dao>>
+    class CustomerDAO <<dao>>
+    class PetDAO <<dao>>
+    class ServiceDAO <<dao>>
+    class ProductDAO <<dao>>
+    class ReportDAO <<dao>>
+  }
+  together {
+    class AppointmentDAO <<dao>>
+    class AppointmentServiceDAO <<dao>>
+    class InvoiceDAO <<dao>>
+    class InvoiceItemDAO <<dao>>
+    class PaymentDAO <<dao>>
+  }
+  together {
+    class PetStayDAO <<dao>>
+    class PetCareLogDAO <<dao>>
+    class PetCareMediaDAO <<dao>>
+  }
+}
+
+' --- Infra + Models ---
+package "Infrastructure" as INF #F5F5F5 {
+  class Session
+  class DBModule <<module>> as "db module"
+  class ConfigModule <<module>> as "config module"
+  Session ..> User : phiên đăng nhập
+  DBModule ..> ConfigModule
+}
+
+package "Domain Models  (models.py)" as MDL #FFF0F5 {
+  class User <<dataclass>>
+  class Customer <<dataclass>>
+  class Pet <<dataclass>>
+  class Service <<dataclass>>
+  class Product <<dataclass>>
+  class Appointment <<dataclass>>
+  class Invoice <<dataclass>>
+}
+
+database "MySQL\npetcare_db" as DB #EEEEEE
+
+' --- Luồng chính ---
+UI -down-> SVC : gọi nghiệp vụ
+SVC -down-> DAO : truy cập dữ liệu
+DAO -down-> DBModule
+DBModule -down-> DB
+
+Session ..> User : phiên đăng nhập
+SVC ..> MDL : đọc/ghi model
+DAO ..> MDL : map row → object
+
+PetCareApp ..> AuthService
+PetCareApp ..> CustomerService
+PetCareApp ..> AppointmentService
+PetCareApp ..> InvoiceService
+PetCareApp ..> ReportService
+PetCareWorkspaceDialog ..> PetBoardingService
+DashboardView ..> ReportService
+
+AuthService --> UserDAO
+CustomerService --> CustomerDAO
+PetService --> PetDAO
+AppointmentService --> AppointmentDAO
+InvoiceService --> InvoiceDAO
+PetBoardingService --> PetStayDAO
+ReportService --> ReportDAO
+
+note bottom of UI
+  **PetCareApp**: KH, thú cưng, DV, lịch hẹn,
+  HĐ, sản phẩm, POS, nhân viên
+end note
+
+note bottom of SVC
+  Module Python (hàm tự do),
+  không phải class OOP —
+  biểu diễn dạng «service» cho rõ tầng
+end note
+
+note right of MDL
+  Chi tiết thuộc tính & quan hệ:
+  **Class_Models.uml**
+end note
+
+@enduml

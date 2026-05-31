@@ -1,0 +1,83 @@
+@startuml PetCare_Class_Backend
+' =====================================================================
+' Class Diagram - Service ↔ DAO ↔ DB (chi tiết backend)
+' =====================================================================
+
+left to right direction
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam nodesep 15
+skinparam ranksep 25
+
+package "Services" as SVC {
+  class AuthService <<service>>
+  class CustomerService <<service>>
+  class PetService <<service>>
+  class ServiceCatalogService <<service>>
+  class ProductService <<service>>
+  class UserService <<service>>
+  class AppointmentService <<service>>
+  class InvoiceService <<service>>
+  class PaymentService <<service>>
+  class PetBoardingService <<service>>
+  class ReportService <<service>>
+}
+
+package "DAOs" as DAO {
+  class UserDAO <<dao>>
+  class CustomerDAO <<dao>>
+  class PetDAO <<dao>>
+  class ServiceDAO <<dao>>
+  class ProductDAO <<dao>>
+  class AppointmentDAO <<dao>>
+  class AppointmentServiceDAO <<dao>>
+  class InvoiceDAO <<dao>>
+  class InvoiceItemDAO <<dao>>
+  class PaymentDAO <<dao>>
+  class PetStayDAO <<dao>>
+  class PetCareLogDAO <<dao>>
+  class PetCareMediaDAO <<dao>>
+  class ReportDAO <<dao>>
+}
+
+class DBModule <<module>> as "db module"
+class Session
+
+AuthService --> UserDAO
+CustomerService --> CustomerDAO
+PetService --> PetDAO
+ServiceCatalogService --> ServiceDAO
+ProductService --> ProductDAO
+UserService --> UserDAO
+AppointmentService --> AppointmentDAO
+AppointmentService --> AppointmentServiceDAO
+InvoiceService --> InvoiceDAO
+InvoiceService --> InvoiceItemDAO
+InvoiceService --> ProductDAO
+PaymentService --> PaymentDAO
+PaymentService --> InvoiceDAO
+PetBoardingService --> PetStayDAO
+PetBoardingService --> PetCareLogDAO
+PetBoardingService --> PetCareMediaDAO
+PetBoardingService --> InvoiceDAO
+ReportService --> ReportDAO
+
+UserDAO --> DBModule
+CustomerDAO --> DBModule
+PetDAO --> DBModule
+ServiceDAO --> DBModule
+ProductDAO --> DBModule
+AppointmentDAO --> DBModule
+AppointmentServiceDAO --> DBModule
+InvoiceDAO --> DBModule
+InvoiceItemDAO --> DBModule
+PaymentDAO --> DBModule
+PetStayDAO --> DBModule
+PetCareLogDAO --> DBModule
+PetCareMediaDAO --> DBModule
+ReportDAO --> DBModule
+
+AuthService ..> Session
+UserService ..> Session
+
+@enduml

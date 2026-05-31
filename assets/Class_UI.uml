@@ -1,0 +1,75 @@
+@startuml PetCare_Class_UI
+' =====================================================================
+' Class Diagram - UI Layer (PyQt6)
+' =====================================================================
+
+top to bottom direction
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+
+package "petcare_ui" {
+
+  class PetCareApp <<QMainWindow>> {
+    -stack: QStackedWidget
+    -sidebar: Sidebar
+    -dashboard: DashboardView
+    +show_login() / show_main()
+  }
+
+  class LoginPage <<QWidget>> {
+    +on_login_clicked()
+  }
+
+  class Sidebar <<QWidget>> {
+    +navigate(page)
+  }
+
+  class DashboardView <<QWidget>> {
+    +set_overview()
+    +set_revenue_chart()
+    +set_employee_table()
+  }
+
+  class PetCareWorkspaceDialog <<QDialog>> {
+    +load_pet()
+    +check_in / feeding / media
+    +create_stay_invoice()
+  }
+
+  class RevenueBarChart <<QWidget>>
+  class RetailCategoryLineChart <<QWidget>>
+  class RetailProductPieChart <<QWidget>>
+
+  class Theme {
+    +accent, border, text colors
+  }
+
+  PetCareApp *-- Sidebar
+  PetCareApp *-- DashboardView
+  PetCareApp ..> LoginPage : màn hình đăng nhập
+  PetCareApp ..> PetCareWorkspaceDialog : chăm sóc thú
+  DashboardView *-- RevenueBarChart
+  DashboardView *-- RetailCategoryLineChart
+  DashboardView *-- RetailProductPieChart
+}
+
+package "Services (gọi từ UI)" #FFF8E8 {
+  class AuthService <<service>>
+  class CustomerService <<service>>
+  class PetService <<service>>
+  class AppointmentService <<service>>
+  class InvoiceService <<service>>
+  class ReportService <<service>>
+  class PetBoardingService <<service>>
+}
+
+PetCareApp ..> AuthService
+PetCareApp ..> CustomerService
+PetCareApp ..> PetService
+PetCareApp ..> AppointmentService
+PetCareApp ..> InvoiceService
+PetCareApp ..> ReportService
+PetCareWorkspaceDialog ..> PetBoardingService
+DashboardView ..> ReportService
+
+@enduml

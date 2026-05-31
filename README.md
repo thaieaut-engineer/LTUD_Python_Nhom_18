@@ -1,4 +1,10 @@
---File sơ đồ class và ERD nằm trong thư mục assets
+--File sơ đồ nằm trong thư mục `assets/` (PlantUML — render tại https://plantuml.com):
+  - `UseCase.uml` — Use case tổng quan
+  - `ERD.uml` — Sơ đồ ERD (15 bảng, `database/schema.sql`)
+  - `Class.uml` — Class tổng quan kiến trúc (UI → Service → DAO → MySQL)
+  - `Class_Models.uml` — Chi tiết domain models & report VOs
+  - `Class_Backend.uml` — Chi tiết Service ↔ DAO
+  - `Class_UI.uml` — Chi tiết lớp giao diện PyQt6
 
 - Thành viên trong nhóm
 1. Quàng Duy Thái (Trưởng nhóm)

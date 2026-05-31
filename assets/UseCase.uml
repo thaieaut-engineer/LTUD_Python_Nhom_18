@@ -1,0 +1,166 @@
+@startuml PetCare_UseCase
+' =====================================================================
+' Use Case tổng quan - Hệ thống Quản lý Dịch vụ Chăm sóc Thú cưng
+' Nguồn: README.md, src/petcare_ui/app.py
+' Render: PlantUML (https://plantuml.com/use-case-diagram)
+' =====================================================================
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #FEFEFE
+  BorderColor #333333
+}
+
+actor "Admin" as admin #LightBlue
+actor "Nhân viên" as employee #LightGreen
+
+rectangle "Hệ thống Quản lý Dịch vụ Chăm sóc Thú cưng" {
+
+  package "Xác thực & phiên làm việc" {
+    usecase "Đăng nhập" as UC_LOGIN
+    usecase "Đăng xuất" as UC_LOGOUT
+    usecase "Đổi mật khẩu" as UC_CHANGE_PWD
+  }
+
+  package "Quản lý khách hàng & thú cưng" {
+    usecase "Quản lý khách hàng\n(CRUD, tìm kiếm)" as UC_CUSTOMER
+    usecase "Quản lý thú cưng\n(CRUD, tìm kiếm)" as UC_PET
+    usecase "Chăm sóc / lưu trú thú cưng\n(nhận thú, cho ăn, media, lịch sử)" as UC_BOARDING
+  }
+
+  package "Dịch vụ & lịch hẹn" {
+    usecase "Quản lý dịch vụ\n(CRUD, giá)" as UC_SERVICE
+    usecase "Đặt lịch hẹn" as UC_APPT_CREATE
+    usecase "Cập nhật trạng thái lịch hẹn" as UC_APPT_STATUS
+    usecase "Ghi kết quả dịch vụ" as UC_APPT_RESULT
+    usecase "Phân công nhân viên\ncho lịch hẹn" as UC_APPT_ASSIGN
+    usecase "Xem lịch hẹn\n(theo phân công / chưa phân công)" as UC_APPT_VIEW
+  }
+
+  package "Sản phẩm & bán hàng" {
+    usecase "Quản lý sản phẩm\n(đồ ăn, phụ kiện, tồn kho)" as UC_PRODUCT
+    usecase "Tạo hóa đơn bán lẻ (POS)" as UC_RETAIL
+    usecase "Thêm sản phẩm vào\nhóa đơn dịch vụ" as UC_ADD_PRODUCT_INV
+  }
+
+  package "Thanh toán & hóa đơn" {
+    usecase "Tạo hóa đơn dịch vụ\n(từ lịch hẹn / lưu trú)" as UC_INV_SERVICE
+    usecase "Thanh toán hóa đơn" as UC_PAYMENT
+    usecase "Xuất / in hóa đơn" as UC_EXPORT_INV
+    usecase "Tra cứu hóa đơn\n(mã HĐ, khách, loại)" as UC_INV_SEARCH
+  }
+
+  package "Nhân sự (Admin)" {
+    usecase "Quản lý người dùng\n(Admin / Nhân viên)" as UC_USER_MGMT
+    usecase "Trang nhân viên\n(KPI, khoá/mở, reset MK)" as UC_EMP_PAGE
+    usecase "Xem doanh số theo nhân viên" as UC_EMP_REVENUE
+  }
+
+  package "Báo cáo & thống kê" {
+    usecase "Dashboard tổng quan\n(doanh thu, biểu đồ)" as UC_DASHBOARD
+    usecase "Thống kê doanh thu\n(ngày / tháng)" as UC_REVENUE
+    usecase "Thống kê dịch vụ phổ biến" as UC_TOP_SERVICE
+    usecase "Thống kê khách hàng" as UC_CUST_STATS
+  }
+
+  package "Tìm kiếm" {
+    usecase "Tìm kiếm đa module\n(KH, DV, SP, HĐ, NV)" as UC_SEARCH
+  }
+}
+
+' --- Actor chung ---
+admin --> UC_LOGIN
+employee --> UC_LOGIN
+admin --> UC_LOGOUT
+employee --> UC_LOGOUT
+admin --> UC_CHANGE_PWD
+employee --> UC_CHANGE_PWD
+
+admin --> UC_CUSTOMER
+employee --> UC_CUSTOMER
+admin --> UC_PET
+employee --> UC_PET
+admin --> UC_BOARDING
+employee --> UC_BOARDING
+
+admin --> UC_SERVICE
+employee --> UC_SERVICE
+admin --> UC_APPT_CREATE
+employee --> UC_APPT_CREATE
+admin --> UC_APPT_STATUS
+employee --> UC_APPT_STATUS
+admin --> UC_APPT_RESULT
+employee --> UC_APPT_RESULT
+admin --> UC_APPT_VIEW
+employee --> UC_APPT_VIEW
+
+admin --> UC_PRODUCT
+employee --> UC_PRODUCT
+admin --> UC_RETAIL
+employee --> UC_RETAIL
+admin --> UC_ADD_PRODUCT_INV
+employee --> UC_ADD_PRODUCT_INV
+
+admin --> UC_INV_SERVICE
+employee --> UC_INV_SERVICE
+admin --> UC_PAYMENT
+employee --> UC_PAYMENT
+admin --> UC_EXPORT_INV
+employee --> UC_EXPORT_INV
+admin --> UC_INV_SEARCH
+employee --> UC_INV_SEARCH
+
+admin --> UC_DASHBOARD
+employee --> UC_DASHBOARD
+admin --> UC_REVENUE
+employee --> UC_REVENUE
+admin --> UC_TOP_SERVICE
+employee --> UC_TOP_SERVICE
+admin --> UC_CUST_STATS
+employee --> UC_CUST_STATS
+admin --> UC_SEARCH
+employee --> UC_SEARCH
+
+' --- Chỉ Admin ---
+admin --> UC_APPT_ASSIGN
+admin --> UC_USER_MGMT
+admin --> UC_EMP_PAGE
+admin --> UC_EMP_REVENUE
+
+' --- Include / Extend ---
+UC_APPT_CREATE ..> UC_CUSTOMER : <<include>>
+UC_APPT_CREATE ..> UC_PET : <<include>>
+UC_APPT_CREATE ..> UC_SERVICE : <<include>>
+
+UC_INV_SERVICE ..> UC_APPT_CREATE : <<extend>>
+UC_INV_SERVICE ..> UC_BOARDING : <<extend>>
+
+UC_RETAIL ..> UC_PRODUCT : <<include>>
+UC_ADD_PRODUCT_INV ..> UC_PRODUCT : <<include>>
+
+UC_PAYMENT ..> UC_INV_SERVICE : <<include>>
+UC_PAYMENT ..> UC_RETAIL : <<include>>
+
+UC_EXPORT_INV ..> UC_PAYMENT : <<extend>>
+
+UC_DASHBOARD ..> UC_REVENUE : <<include>>
+UC_DASHBOARD ..> UC_EMP_REVENUE : <<include>>
+
+UC_EMP_PAGE ..> UC_USER_MGMT : <<extend>>
+
+note right of employee
+  Nhân viên (không phải Admin):
+  • Chỉ xem lịch hẹn được phân công
+  • Cập nhật trạng thái / kết quả
+    lịch hẹn của mình
+end note
+
+note bottom of UC_BOARDING
+  Nhận thú → gán NV → ghi cho ăn /
+  chăm sóc → upload ảnh-video →
+  khách nhận thú → hóa đơn lưu trú
+end note
+
+@enduml

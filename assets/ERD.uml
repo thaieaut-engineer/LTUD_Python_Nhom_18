@@ -1,0 +1,274 @@
+@startuml PetCare_ERD
+' =====================================================================
+' ERD - Hệ thống Quản lý Dịch vụ Chăm sóc Thú cưng
+' Database: petcare_db (MySQL / InnoDB)
+' Nguồn: database/schema.sql
+' Render: PlantUML IE diagram
+' =====================================================================
+
+hide circle
+top to bottom direction
+skinparam linetype ortho
+skinparam nodesep 25
+skinparam ranksep 35
+skinparam entity {
+  BackgroundColor #FEFEFE
+  BorderColor #333333
+}
+
+' =================================================================
+' Nhóm 1: Phân quyền & người dùng
+' =================================================================
+together {
+  entity "role" as role {
+    * **id** : INT <<PK>>
+    --
+    * name : VARCHAR(20) <<UK>>
+    description : VARCHAR(100)
+  }
+
+  entity "user" as user {
+    * **id** : INT <<PK>>
+    --
+    * role_id : INT <<FK>>
+    * username : VARCHAR(50) <<UK>>
+    * password_hash : VARCHAR(255)
+    * full_name : VARCHAR(100)
+    phone : VARCHAR(20)
+    * is_active : TINYINT(1)
+    * created_at / updated_at : DATETIME
+  }
+
+  entity "activity_log" as activity_log {
+    * **id** : BIGINT <<PK>>
+    --
+    * actor_user_id : INT <<FK>>
+    * actor_username : VARCHAR(50)
+    * action : VARCHAR(50)
+    entity : VARCHAR(50)
+    entity_id : INT
+    message : VARCHAR(255)
+    extra : TEXT
+    * created_at : DATETIME
+  }
+}
+
+role ||--o{ user : "role_id"
+user ||--o{ activity_log : "actor_user_id"
+
+' =================================================================
+' Nhóm 2: Khách hàng & thú cưng
+' =================================================================
+together {
+  entity "customer" as customer {
+    * **id** : INT <<PK>>
+    --
+    * full_name : VARCHAR(100)
+    * phone : VARCHAR(20) <<UK>>
+    address : VARCHAR(255)
+    email : VARCHAR(100)
+    * created_at / updated_at : DATETIME
+  }
+
+  entity "pet" as pet {
+    * **id** : INT <<PK>>
+    --
+    * customer_id : INT <<FK>>
+    * name : VARCHAR(50)
+    * species : VARCHAR(30)
+    breed : VARCHAR(50)
+    age : INT
+    gender : VARCHAR(10)
+    health_note : TEXT
+    * created_at / updated_at : DATETIME
+  }
+}
+
+customer ||--o{ pet : "customer_id"
+
+' =================================================================
+' Nhóm 3: Dịch vụ & lịch hẹn
+' =================================================================
+together {
+  entity "service" as service {
+    * **id** : INT <<PK>>
+    --
+    * name : VARCHAR(100) <<UK>>
+    * price : DECIMAL(12,2)
+    description : TEXT
+    duration_min : INT
+    * is_active : TINYINT(1)
+    * created_at / updated_at : DATETIME
+  }
+
+  entity "appointment" as appointment {
+    * **id** : INT <<PK>>
+    --
+    * customer_id : INT <<FK>>
+    pet_id : INT <<FK>> <<nullable>>
+    employee_id : INT <<FK>> <<nullable>>
+    * scheduled_at : DATETIME
+    * status : ENUM
+    note : TEXT
+    * created_at / updated_at : DATETIME
+  }
+
+  entity "appointment_service" as appointment_service {
+    * **id** : INT <<PK>>
+    --
+    * appointment_id : INT <<FK>>
+    * service_id : INT <<FK>>
+    pet_id : INT <<FK>> <<nullable>>
+    * quantity : INT
+    * unit_price : DECIMAL(12,2)
+  }
+}
+
+customer ||--o{ appointment : "customer_id"
+pet ||--o{ appointment : "pet_id"
+user ||--o{ appointment : "employee_id"
+appointment ||--o{ appointment_service : "appointment_id"
+service ||--o{ appointment_service : "service_id"
+pet ||--o{ appointment_service : "pet_id"
+
+' =================================================================
+' Nhóm 4: Sản phẩm
+' =================================================================
+entity "product" as product {
+  * **id** : INT <<PK>>
+  --
+  * name : VARCHAR(120) <<UK>>
+  * category : ENUM <<DO_AN|PHU_KIEN>>
+  sku : VARCHAR(40)
+  * price : DECIMAL(12,2)
+  * stock : INT
+  description : TEXT
+  * is_active : TINYINT(1)
+  * created_at / updated_at : DATETIME
+}
+
+' =================================================================
+' Nhóm 5: Hóa đơn & thanh toán
+' =================================================================
+together {
+  entity "invoice" as invoice {
+    * **id** : INT <<PK>>
+    --
+    appointment_id : INT <<FK>> <<UK, nullable>>
+    pet_stay_id : INT <<FK>> <<UK, nullable>>
+    customer_id : INT <<FK>> <<nullable>>
+    * invoice_type : ENUM <<SERVICE|RETAIL>>
+    * invoice_no : VARCHAR(30) <<UK>>
+    * issued_at : DATETIME
+    * subtotal / discount / tax / total : DECIMAL
+    * payment_status : ENUM
+    created_by : INT <<FK>> <<nullable>>
+    note : TEXT
+    * created_at / updated_at : DATETIME
+  }
+
+  entity "invoice_item" as invoice_item {
+    * **id** : INT <<PK>>
+    --
+    * invoice_id : INT <<FK>>
+    service_id : INT <<FK>> <<nullable>>
+    product_id : INT <<FK>> <<nullable>>
+    * item_type : ENUM <<SERVICE|PRODUCT>>
+    pet_id : INT <<FK>> <<nullable>>
+    * quantity : INT
+    * unit_price : DECIMAL(12,2)
+    line_total : DECIMAL <<generated>>
+  }
+
+  entity "payment" as payment {
+    * **id** : INT <<PK>>
+    --
+    * invoice_id : INT <<FK>>
+    * amount : DECIMAL(14,2)
+    * method : ENUM <<TIEN_MAT|CHUYEN_KHOAN|THE>>
+    * paid_at : DATETIME
+    note : VARCHAR(255)
+    created_by : INT <<FK>> <<nullable>>
+  }
+}
+
+customer ||--o{ invoice : "customer_id"
+user ||--o{ invoice : "created_by"
+appointment ||--o| invoice : "appointment_id"
+invoice ||--o{ invoice_item : "invoice_id"
+invoice ||--o{ payment : "invoice_id"
+user ||--o{ payment : "created_by"
+service ||--o{ invoice_item : "service_id"
+product ||--o{ invoice_item : "product_id"
+pet ||--o{ invoice_item : "pet_id"
+
+' =================================================================
+' Nhóm 6: Lưu trú & chăm sóc thú cưng
+' =================================================================
+together {
+  entity "pet_stay" as pet_stay {
+    * **id** : INT <<PK>>
+    --
+    * pet_id : INT <<FK>>
+    * customer_id : INT <<FK>>
+    employee_id : INT <<FK>> <<nullable>>
+    * check_in_at : DATETIME
+    expected_check_out_at : DATETIME
+    actual_check_out_at : DATETIME
+    * status : ENUM
+    * daily_rate : DECIMAL(12,2)
+    note : TEXT
+    * created_at / updated_at : DATETIME
+  }
+
+  entity "pet_care_log" as pet_care_log {
+    * **id** : BIGINT <<PK>>
+    --
+    * stay_id : INT <<FK>>
+    employee_id : INT <<nullable>>
+    * log_type : ENUM <<FEEDING|CARE|STATUS>>
+    * content : TEXT
+    product_id : INT <<FK>> <<nullable>>
+    service_id : INT <<FK>> <<nullable>>
+    quantity : INT
+    * created_at : DATETIME
+  }
+
+  entity "pet_care_media" as pet_care_media {
+    * **id** : BIGINT <<PK>>
+    --
+    * stay_id : INT <<FK>>
+    care_log_id : BIGINT <<nullable>>
+    * media_type : ENUM <<IMAGE|VIDEO>>
+    * file_path : VARCHAR(500)
+    caption : VARCHAR(255)
+    * created_at : DATETIME
+  }
+}
+
+pet ||--o{ pet_stay : "pet_id"
+customer ||--o{ pet_stay : "customer_id"
+user ||--o{ pet_stay : "employee_id"
+pet_stay ||--o| invoice : "pet_stay_id"
+pet_stay ||--o{ pet_care_log : "stay_id"
+pet_stay ||--o{ pet_care_media : "stay_id"
+product ||--o{ pet_care_log : "product_id"
+service ||--o{ pet_care_log : "service_id"
+
+note bottom of appointment_service
+  **Bảng trung gian N:M**
+  appointment ↔ service
+end note
+
+note bottom of invoice
+  **invoice_type**
+  • SERVICE → appointment_id hoặc pet_stay_id
+  • RETAIL → POS bán lẻ, appointment_id = NULL
+end note
+
+note bottom of appointment
+  **status**: CHO_XU_LY | DANG_THUC_HIEN
+  | HOAN_THANH | HUY
+end note
+
+@enduml

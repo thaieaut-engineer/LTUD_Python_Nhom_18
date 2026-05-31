@@ -24,6 +24,7 @@ def _row_to_product(row: dict[str, Any]) -> Product:
         stock=int(row.get("stock") or 0),
         sku=row.get("sku"),
         description=row.get("description"),
+        image_path=row.get("image_path"),
         is_active=bool(row["is_active"]),
     )
 
@@ -34,7 +35,7 @@ def list_all(
     category: str | None = None,
 ) -> list[Product]:
     sql = (
-        "SELECT id, name, category, sku, price, stock, description, is_active "
+        "SELECT id, name, category, sku, price, stock, description, image_path, is_active "
         "FROM product"
     )
     where: list[str] = []
@@ -57,7 +58,7 @@ def list_all(
 
 def get_by_id(product_id: int) -> Product | None:
     row = fetch_one(
-        "SELECT id, name, category, sku, price, stock, description, is_active "
+        "SELECT id, name, category, sku, price, stock, description, image_path, is_active "
         "FROM product WHERE id=%s",
         (product_id,),
     )
@@ -125,3 +126,7 @@ def adjust_stock(product_id: int, delta: int) -> None:
         "UPDATE product SET stock = GREATEST(stock + %s, 0) WHERE id=%s",
         (int(delta), product_id),
     )
+
+
+def update_image_path(product_id: int, image_path: str | None) -> None:
+    execute("UPDATE product SET image_path=%s WHERE id=%s", (image_path, product_id))
