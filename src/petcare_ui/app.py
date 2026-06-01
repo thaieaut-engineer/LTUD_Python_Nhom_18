@@ -36,6 +36,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .theme import THEME, background_image_path, qss
+from .widgets import DEFAULT_PAGE_SIZE, Paginator, PaginationBar
 from .pages.dashboard import DashboardView
 from .pet_care_workspace import PetCareWorkspaceDialog
 from src.petcare_backend.services import auth_service
@@ -495,6 +496,9 @@ class PetCareApp(QMainWindow):
         self._products_viewport: QWidget | None = None
         self._invoice_payment_mode: str = "unpaid"
         self._login_worker: _LoginWorker | None = None
+        self._paginators: dict[str, Paginator] = {}
+        self._pagination_bars: dict[str, PaginationBar] = {}
+        self._list_page_rows: dict[str, list] = {}
 
         self._bg_path: str = background_image_path()
 
@@ -670,6 +674,7 @@ class PetCareApp(QMainWindow):
         if customers_page:
             table: QTableWidget = customers_page.customersTable
             self._setup_table(table)
+            self._install_pagination_bar("customers", customers_page, table)
             self._insert_add_customer_button(customers_page)
             customers_page.searchEdit.textChanged.connect(lambda text: self._reload_customers(text))
             customers_page.viewPetsButton.clicked.connect(self._on_view_customer_pets)
@@ -678,6 +683,7 @@ class PetCareApp(QMainWindow):
         if services_page:
             table: QTableWidget = services_page.servicesTable
             self._setup_table(table)
+            self._install_pagination_bar("services", services_page, table)
             if hasattr(services_page, "addServiceButton"):
                 services_page.addServiceButton.clicked.connect(self._on_add_service_clicked)
             if hasattr(services_page, "searchEdit"):
@@ -688,6 +694,9 @@ class PetCareApp(QMainWindow):
         products_page = self._pages.get("products")
         if products_page:
             if hasattr(products_page, "productsScrollArea"):
+                self._install_pagination_bar(
+                    "products", products_page, products_page.productsScrollArea
+                )
                 psa: QScrollArea = products_page.productsScrollArea
                 # widgetResizable(True) keo cao bang viewport -> QGridLayout dan doc hang,
                 # thẻ neo tren nhung o noi dung bi gian -> lech hang / khoang trong lon.
@@ -730,6 +739,7 @@ class PetCareApp(QMainWindow):
                 ptable.setColumnWidth(6, 230)
                 ptable.cellDoubleClicked.connect(self._on_pet_image_double_clicked)
                 ptable.cellClicked.connect(self._on_pet_table_cell_clicked)
+                self._install_pagination_bar("pets", pets_page, ptable)
             if hasattr(pets_page, "searchEdit"):
                 pets_page.searchEdit.textChanged.connect(
                     lambda text: self._reload_pets(text)
@@ -756,6 +766,7 @@ class PetCareApp(QMainWindow):
 
             table: QTableWidget = ap_page.appointmentsTable
             self._setup_appointments_table(table)
+            self._install_pagination_bar("appointments", ap_page, table)
             self._appointment_list_mode = "active"
             self._setup_appointment_list_tabs(ap_page)
             table.cellClicked.connect(lambda r, c: self._on_appointment_row_clicked(r, c))
@@ -792,8 +803,9 @@ class PetCareApp(QMainWindow):
             evh = table.verticalHeader()
             evh.setDefaultSectionSize(64)
             evh.setMinimumSectionSize(62)
+            self._install_pagination_bar("employees", emp_page, table)
             if hasattr(emp_page, "searchEdit"):
-                emp_page.searchEdit.textChanged.connect(lambda _: self._render_employees_table())
+                emp_page.searchEdit.textChanged.connect(self._on_employees_search_changed)
             if hasattr(emp_page, "addEmployeeButton"):
                 emp_page.addEmployeeButton.clicked.connect(self._on_add_employee_clicked)
 
@@ -883,6 +895,145 @@ class PetCareApp(QMainWindow):
         )
         layout.addWidget(table, 1)
         inv_page.invoicesTable = table  # type: ignore[attr-defined]
+        self._install_pagination_bar("invoices", inv_page, table)
+
+    def _paginator(self, key: str) -> Paginator:
+        if key not in self._paginators:
+            self._paginators[key] = Paginator(DEFAULT_PAGE_SIZE)
+        return self._paginators[key]
+
+    def _install_pagination_bar(
+        self, page_key: str, host: QWidget, anchor: QWidget
+    ) -> PaginationBar:
+        attr = f"_{page_key}_pagination"
+        existing = getattr(host, attr, None)
+        if isinstance(existing, PaginationBar):
+            self._pagination_bars[page_key] = existing
+            return existing
+
+        bar = PaginationBar(host)
+        bar.setMinimumHeight(44)
+        bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._configure_pagination_anchor(anchor)
+        self._place_pagination_bar(host, anchor, bar)
+
+        bar.page_changed.connect(
+            lambda page, k=page_key: self._on_pagination_page_changed(k, page)
+        )
+        bar.page_size_changed.connect(
+            lambda size, k=page_key: self._on_pagination_size_changed(k, size)
+        )
+        setattr(host, attr, bar)
+        self._pagination_bars[page_key] = bar
+        bar.bind(self._paginator(page_key))
+        return bar
+
+    @staticmethod
+    def _configure_pagination_anchor(anchor: QWidget) -> None:
+        if isinstance(anchor, QTableWidget):
+            anchor.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Expanding,
+            )
+        elif isinstance(anchor, QScrollArea):
+            anchor.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Expanding,
+            )
+
+        parent = anchor.parentWidget()
+        lay = parent.layout() if parent is not None else None
+        if isinstance(lay, QVBoxLayout):
+            idx = lay.indexOf(anchor)
+            if idx >= 0:
+                lay.setStretch(idx, 1)
+
+    def _place_pagination_bar(
+        self, host: QWidget, anchor: QWidget, bar: PaginationBar
+    ) -> None:
+        page_lay = host.layout()
+
+        scroll_area: QScrollArea | None = None
+        walker: QWidget | None = anchor
+        while walker is not None and walker is not host:
+            if isinstance(walker, QScrollArea):
+                scroll_area = walker
+                break
+            walker = walker.parentWidget()
+
+        if scroll_area is not None and isinstance(page_lay, QVBoxLayout):
+            idx = page_lay.indexOf(scroll_area)
+            if idx >= 0:
+                page_lay.insertWidget(idx + 1, bar, 0)
+                page_lay.setStretch(idx, 1)
+                page_lay.setStretch(idx + 1, 0)
+                return
+
+        card_frame: QWidget | None = None
+        walker = anchor
+        while walker is not None and walker is not host:
+            if walker.objectName() in ("Card", "recentCard"):
+                card_frame = walker
+                break
+            walker = walker.parentWidget()
+
+        if card_frame is not None and isinstance(page_lay, QVBoxLayout):
+            idx = page_lay.indexOf(card_frame)
+            if idx >= 0:
+                page_lay.insertWidget(idx + 1, bar, 0)
+                page_lay.setStretch(idx, 1)
+                page_lay.setStretch(idx + 1, 0)
+                return
+
+        parent = anchor.parentWidget()
+        lay = parent.layout() if parent is not None else None
+        if isinstance(lay, QVBoxLayout):
+            idx = lay.indexOf(anchor)
+            if idx >= 0:
+                lay.insertWidget(idx + 1, bar, 0)
+                lay.setStretch(idx, 1)
+                lay.setStretch(idx + 1, 0)
+                return
+
+        if isinstance(page_lay, QVBoxLayout):
+            page_lay.addWidget(bar, 0)
+
+    def _on_pagination_page_changed(self, key: str, page: int) -> None:
+        self._paginator(key).current_page = max(1, int(page))
+        self._rerender_list_page(key)
+
+    def _on_pagination_size_changed(self, key: str, size: int) -> None:
+        pag = self._paginator(key)
+        pag.page_size = max(1, int(size))
+        pag.reset_page()
+        self._rerender_list_page(key)
+
+    def _rerender_list_page(self, key: str) -> None:
+        renders = {
+            "customers": self._render_customers_table,
+            "services": self._render_services_table,
+            "pets": self._render_pets_table,
+            "products": self._render_products_table,
+            "appointments": self._render_appointments_table_db,
+            "invoices": self._render_invoices_table,
+            "employees": self._render_employees_table,
+        }
+        fn = renders.get(key)
+        if fn is not None:
+            fn()
+
+    def _paginate_rows(self, key: str, items: list) -> list:
+        pag = self._paginator(key)
+        page_items, _, _ = pag.page_slice(items)
+        bar = self._pagination_bars.get(key)
+        if bar is not None:
+            bar.bind(pag)
+        self._list_page_rows[key] = page_items
+        return page_items
+
+    def _on_employees_search_changed(self) -> None:
+        self._paginator("employees").reset_page()
+        self._render_employees_table()
 
     def _reload_invoices_table(self) -> None:
         if not self._has_active_session():
@@ -920,10 +1071,20 @@ class PetCareApp(QMainWindow):
         ]
 
         self._invoice_rows = rows  # type: ignore[attr-defined]
+        self._paginator("invoices").reset_page()
+        self._render_invoices_table()
+
+    def _render_invoices_table(self) -> None:
+        inv_page = self._pages.get("invoices")
+        if not inv_page or not hasattr(inv_page, "invoicesTable"):
+            return
+
+        rows = getattr(self, "_invoice_rows", [])
+        page_rows = self._paginate_rows("invoices", rows)
 
         table: QTableWidget = inv_page.invoicesTable
-        table.setRowCount(len(rows))
-        for r, i in enumerate(rows):
+        table.setRowCount(len(page_rows))
+        for r, i in enumerate(page_rows):
             table.setItem(r, 0, QTableWidgetItem(str(i.get("invoice_no", ""))))
             inv_type = str(i.get("invoice_type") or "SERVICE")
             type_label = "Bán lẻ" if inv_type == "RETAIL" else "Dịch vụ"
@@ -1758,7 +1919,7 @@ class PetCareApp(QMainWindow):
         if hasattr(ap_page, "appointmentSearchEdit"):
             ap_page.appointmentSearchEdit.setVisible(False)
             ap_page.appointmentSearchEdit.textChanged.connect(
-                lambda _: self._apply_appointment_search_filter()
+                lambda _: self._on_appointment_search_changed()
             )
 
     def _set_appointment_list_mode(self, mode: str) -> None:
@@ -1787,15 +1948,41 @@ class PetCareApp(QMainWindow):
         except (TypeError, ValueError):
             return "0đ"
 
-    def _apply_appointment_search_filter(self) -> None:
+    def _on_appointment_search_changed(self) -> None:
+        self._paginator("appointments").reset_page()
+        self._render_appointments_table_db()
+
+    def _appointments_filtered_rows(self) -> list:
+        rows = getattr(self, "_appointments_rows", [])
         ap_page = self._pages.get("appointments")
         if not ap_page:
-            return
-        table: QTableWidget = ap_page.appointmentsTable
+            return rows
+        if getattr(self, "_appointment_list_mode", "active") == "active":
+            return rows
         query = ""
         if hasattr(ap_page, "appointmentSearchEdit"):
             query = ap_page.appointmentSearchEdit.text()
-        self._filter_table(table, query, cols=(0, 1, 2, 3, 4, 5, 6))
+        q = (query or "").strip().lower()
+        if not q:
+            return rows
+        filtered: list = []
+        for a in rows:
+            blob = " ".join([
+                a["scheduled_at"].strftime("%d/%m/%Y %H:%M") if a.get("scheduled_at") else "",
+                str(a.get("customer_name") or ""),
+                str(a.get("pet_name") or ""),
+                str(a.get("service_name") or ""),
+                str(a.get("employee_name") or ""),
+                str(a.get("status_label") or ""),
+                str(a.get("note") or ""),
+            ]).lower()
+            if q in blob:
+                filtered.append(a)
+        return filtered
+
+    def _apply_appointment_search_filter(self) -> None:
+        """Giữ tương thích: lọc đã gộp vào _appointments_filtered_rows."""
+        self._render_appointments_table_db()
 
     def _update_appointment_status_badges(self, rows: list) -> None:
         ap_page = self._pages.get("appointments")
@@ -2072,15 +2259,17 @@ class PetCareApp(QMainWindow):
             only_unassigned=only_unassigned,
             status_scope=scope,
         )
+        self._paginator("appointments").reset_page()
         self._render_appointments_table_db()
-        self._apply_appointment_search_filter()
 
     def _render_appointments_table_db(self) -> None:
         ap_page = self._pages.get("appointments")
         if not ap_page:
             return
         table: QTableWidget = ap_page.appointmentsTable
-        rows = getattr(self, "_appointments_rows", [])
+        filtered = self._appointments_filtered_rows()
+        self._update_appointment_status_badges(filtered)
+        rows = self._paginate_rows("appointments", filtered)
         table.blockSignals(True)
         table.setRowCount(len(rows))
         for r, a in enumerate(rows):
@@ -2122,14 +2311,13 @@ class PetCareApp(QMainWindow):
 
         # ensure table is read-only
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._update_appointment_status_badges(rows)
 
     def _on_appointment_selection_changed_db(self) -> None:
         ap_page = self._pages.get("appointments")
         if not ap_page:
             return
         row = ap_page.appointmentsTable.currentRow()
-        rows = getattr(self, "_appointments_rows", [])
+        rows = self._list_page_rows.get("appointments") or []
         if row < 0 or row >= len(rows):
             ap_page.appointmentDetailEdit.clear()
             return
@@ -2394,7 +2582,7 @@ class PetCareApp(QMainWindow):
     def _show_appointment_detail_dialog(self, row: int) -> None:
         from src.petcare_backend.dao import appointment_service_dao
 
-        rows = getattr(self, "_appointments_rows", [])
+        rows = self._list_page_rows.get("appointments") or getattr(self, "_appointments_rows", [])
         if row < 0 or row >= len(rows):
             return
         a = rows[row]
@@ -3076,6 +3264,7 @@ class PetCareApp(QMainWindow):
             return
         q = (query or "").strip()
         self._customers = list(customer_service.list_customers(q or None))
+        self._paginator("customers").reset_page()
         self._render_customers_table()
         self._refresh_pets_customer_filter()
         self._refresh_appointments_customer_combo()
@@ -3101,6 +3290,7 @@ class PetCareApp(QMainWindow):
             visible = all_active
         self._services_list = all_active
         self._services_visible = visible  # dung de render bang
+        self._paginator("services").reset_page()
         self._render_services_table()
         self._refresh_appointment_services_combo()
 
@@ -3128,6 +3318,7 @@ class PetCareApp(QMainWindow):
         if q is None and pets_page and hasattr(pets_page, "searchEdit"):
             q = (pets_page.searchEdit.text() or "").strip() or None
         self._pets = list(pet_service.list_pets(customer_id=selected, query=q))
+        self._paginator("pets").reset_page()
         self._render_pets_table()
         self._refresh_appointment_pet_list()
 
@@ -3136,8 +3327,9 @@ class PetCareApp(QMainWindow):
         if not customers_page:
             return
         table: QTableWidget = customers_page.customersTable
-        table.setRowCount(len(self._customers))
-        for r, c in enumerate(self._customers):
+        page_rows = self._paginate_rows("customers", self._customers)
+        table.setRowCount(len(page_rows))
+        for r, c in enumerate(page_rows):
             table.setItem(r, 0, QTableWidgetItem(str(c.id)))
             table.setItem(r, 1, QTableWidgetItem(c.full_name))
             table.setItem(r, 2, QTableWidgetItem(c.phone))
@@ -3174,6 +3366,7 @@ class PetCareApp(QMainWindow):
         """
         if not Session.is_admin():
             self._employees_stats = []
+            self._paginator("employees").reset_page()
             self._render_employees_table()
             return
         try:
@@ -3181,10 +3374,12 @@ class PetCareApp(QMainWindow):
         except Exception as exc:
             QMessageBox.warning(self, "Nhân viên", f"Không tải được danh sách nhân viên: {exc}")
             self._employees_stats = []
+            self._paginator("employees").reset_page()
             self._render_employees_table()
             return
 
         self._employees_stats = list(report.employees)
+        self._paginator("employees").reset_page()
         self._render_employees_table()
 
     def _render_employees_table(self) -> None:
@@ -3208,8 +3403,9 @@ class PetCareApp(QMainWindow):
                 return keyword in blob
             rows = [e for e in rows if _match(e)]
 
-        table.setRowCount(len(rows))
-        for r, e in enumerate(rows):
+        page_rows = self._paginate_rows("employees", rows)
+        table.setRowCount(len(page_rows))
+        for r, e in enumerate(page_rows):
             table.setItem(r, 0, QTableWidgetItem(e.full_name))
             table.setItem(r, 1, QTableWidgetItem(e.username))
             table.setItem(r, 2, QTableWidgetItem(e.phone or ""))
@@ -3616,6 +3812,7 @@ class PetCareApp(QMainWindow):
             )
         except Exception:
             self._products_list = []
+        self._paginator("products").reset_page()
         self._render_products_table()
 
     def _sync_products_grid_metrics(self) -> None:
@@ -3652,7 +3849,7 @@ class PetCareApp(QMainWindow):
         grid: QGridLayout = products_page.productsGridLayout
         _clear_grid_layout(grid)
 
-        rows = self._products_list
+        rows = self._paginate_rows("products", self._products_list)
         thumb = 92
 
         if not rows:
@@ -4029,8 +4226,9 @@ class PetCareApp(QMainWindow):
             return
         table: QTableWidget = services_page.servicesTable
         rows = getattr(self, "_services_visible", None) or self._services_list
-        table.setRowCount(len(rows))
-        for r, s in enumerate(rows):
+        page_rows = self._paginate_rows("services", rows)
+        table.setRowCount(len(page_rows))
+        for r, s in enumerate(page_rows):
             table.setItem(r, 0, QTableWidgetItem(s.name))
             table.setItem(r, 1, QTableWidgetItem(f"{int(s.price):,}đ".replace(",", ".")))
             table.setItem(r, 2, QTableWidgetItem(s.description or ""))
@@ -4063,6 +4261,7 @@ class PetCareApp(QMainWindow):
             search_active = bool((pets_page.searchEdit.text() or "").strip())
 
         if not self._pets:
+            self._paginate_rows("pets", [])
             table.clearSpans()
             table.setRowCount(1)
             table.setSpan(0, 0, 1, table.columnCount())
@@ -4081,8 +4280,9 @@ class PetCareApp(QMainWindow):
             return
 
         table.clearSpans()
-        table.setRowCount(len(self._pets))
-        for r, p in enumerate(self._pets):
+        page_pets = self._paginate_rows("pets", self._pets)
+        table.setRowCount(len(page_pets))
+        for r, p in enumerate(page_pets):
             wrap_img = QWidget()
             hi = QHBoxLayout(wrap_img)
             hi.setContentsMargins(4, 4, 4, 4)
@@ -4738,6 +4938,12 @@ class PetCareApp(QMainWindow):
         self._products_list = []
         self._employees_list = []
         self._employees_stats: list = []
+        self._list_page_rows.clear()
+        for pag in self._paginators.values():
+            pag.reset_page()
+            pag.total_items = 0
+        for bar in self._pagination_bars.values():
+            bar.refresh()
 
         emp_page = self._pages.get("employees")
         if emp_page and hasattr(emp_page, "employeesTable"):
